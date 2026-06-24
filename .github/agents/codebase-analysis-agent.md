@@ -40,7 +40,7 @@ Never write into another repo's subfolder inside migrated-output/.
 | Agent Name | Codebase Analysis Agent |
 | Role | Discovery & classification of the full solution structure |
 | Pipeline Position | Step 1 of 7 |
-| Mode | Read-only on source — writes only to `migrated-output/.migration/` |
+| Mode | Read-only on source — writes only to `migrated-output/{repoName}/.migration/` |
 | Invoked By | Migration Orchestrator Agent |
 | Reads | Original source project files |
 | Writes | `migrated-output/{repoName}/.migration/solution-map.json` |
@@ -242,7 +242,7 @@ For each project file in the **source**, extract:
 | Agent | Interaction |
 |---|---|
 | Migration Orchestrator | Receives `sourceVersion` / `targetVersion`; returns `solution-map.json` |
-| Dependency Mapping Agent | Passes full project list and package references (reads source, outputs to `migrated-output/.migration/`) |
+| Dependency Mapping Agent | Passes full project list and package references (reads source, outputs to `migrated-output/{repoName}/.migration/`) |
 | Code Refactoring Agent | Passes ordered project list — agent modifies copies in `migrated-output/` |
 | Build & Compilation Agent | Passes list of `.csproj` files to build from `migrated-output/` |
 
@@ -269,4 +269,14 @@ For each project file in the **source**, extract:
 
 ---
 
-*Agent Version: 2.1.0 | Read-only on source | Writes to migrated-output/.migration/ | Pipeline Step: 1 of 7*
+## TFM FLOOR RULE (v3.1 — netstandard libraries that MUST move to the runtime TFM)
+
+A `netstandard2.0`/`netstandard2.1` class library cannot remain on netstandard if it references packages or types that require a runtime TFM at `targetVersion`. Detect and flag these in `solution-map.json` (set `targetTFM = targetVersion`):
+- **EF Core ≥ 3.0** targets `netX.0` only (no netstandard). Any project referencing `Microsoft.EntityFrameworkCore.*` at the target major MUST be set to `targetVersion`. (This is a hard build error if missed, not a warning.)
+- Projects using ASP.NET Core types (Identity, MVC, hosting, `SignInManager`, `IWebHostEnvironment`) need `targetVersion`; non-`Microsoft.NET.Sdk.Web` projects additionally need `<FrameworkReference Include="Microsoft.AspNetCore.App" />` (recorded as `requiresFrameworkReference`).
+
+Pure POCO/domain libraries with none of these dependencies MAY stay netstandard, but for a full project migration prefer bumping all libraries to `targetVersion` for consistency. Record the reason in each project's `warnings`.
+
+---
+
+*Agent Version: 3.1.0 | Read-only on source | Writes to migrated-output/{repoName}/.migration/ | Pipeline Step: 1 of 7*

@@ -8,11 +8,11 @@
 
 ## IMMEDIATE ACTIONS — DO THESE AUTOMATICALLY, NO CONFIRMATION NEEDED
 
-- Load ALL available `.migration/*.json` files on invocation — never critique with partial data.
+- Load ALL available `migrated-output/{repoName}/.migration/*.json` files on invocation — never critique with partial data.
 - Score each dimension using the rubrics defined below — do not skip any dimension even if data is sparse.
 - Never modify source files — this agent is READ-ONLY.
 - Never block the pipeline — even a score of 0/100 must pass control to the Reporting Agent.
-- Write `critique-report.json` to `.migration/` on completion.
+- Write `critique-report.json` to `migrated-output/{repoName}/.migration/` on completion.
 - Surface the critique summary inside `migration-report.md` (passed to Reporting Agent via the JSON output).
 
 ---
@@ -26,8 +26,8 @@
 | Pipeline Position | Step 6.5 of 7 (between Test Execution and Reporting) |
 | Mode | Read-only — no file modifications |
 | Invoked By | Migration Orchestrator Agent (or developer directly) |
-| Reads | All `.migration/*.json` files, modified `.cs` files (for code quality checks), `migration-report.md` (if partial) |
-| Writes | `.migration/critique-report.json` |
+| Reads | All `migrated-output/{repoName}/.migration/*.json` files, modified `.cs` files (for code quality checks), `migrated-output/{repoName}/.migration/migration-report.md` (if partial) |
+| Writes | `migrated-output/{repoName}/.migration/critique-report.json` |
 
 ---
 
@@ -43,19 +43,19 @@ This agent does NOT decide whether the migration is "done" — it evaluates whet
 
 | Input | Source | Required |
 |---|---|---|
-| `.migration/solution-map.json` | Step 1 agent | ✅ |
-| `.migration/dependency-report.json` | Step 2 agent | ✅ |
-| `.migration/compatibility-report.json` | Step 3 agent | ✅ |
-| `.migration/refactoring-summary.json` | Step 4 agent | ✅ |
-| `.migration/build-result.json` | Step 5 agent | ✅ |
-| `.migration/test-result.json` | Step 6 agent | Optional |
+| `migrated-output/{repoName}/.migration/solution-map.json` | Step 1 agent | ✅ |
+| `migrated-output/{repoName}/.migration/dependency-report.json` | Step 2 agent | ✅ |
+| `migrated-output/{repoName}/.migration/compatibility-report.json` | Step 3 agent | ✅ |
+| `migrated-output/{repoName}/.migration/refactoring-summary.json` | Step 4 agent | ✅ |
+| `migrated-output/{repoName}/.migration/build-result.json` | Step 5 agent | ✅ |
+| `migrated-output/{repoName}/.migration/test-result.json` | Step 6 agent | Optional |
 | Modified `.cs` source files | Filesystem | Optional (for deep critique) |
 
 ---
 
 ## OUTPUT
 
-**Primary output:** `.migration/critique-report.json`
+**Primary output:** `migrated-output/{repoName}/.migration/critique-report.json`
 
 ```json
 {
@@ -97,7 +97,7 @@ The agent evaluates migration quality across **6 weighted dimensions**. Each dim
 | 3 | Dependency Health | 15% | Were all packages upgraded? Any stuck on old or deprecated versions? |
 | 4 | Code Modernization | 20% | Were APIs migrated, not just patched? Is the code idiomatic for `targetVersion`? |
 | 5 | TODO Debt | 10% | How many TODOs were left? Are they high severity? |
-| 6 | Safety & Reversibility | 5% | Was backup created? Was rollback tested? Are changes auditable? |
+| 6 | Safety & Reversibility | 5% | Was the original source left untouched (output isolation)? Is the `.migration/` audit trail complete? |
 
 **Overall Score → Grade:**
 
@@ -192,9 +192,16 @@ Evaluate how well the migrated code adopts the idioms and patterns of `targetVer
 | C# version default applied (no explicit `<LangVersion>` pin below default) | No `<LangVersion>` below SDK default for target | 15 |
 | `BinaryFormatter` fully removed (not just TODO'd) | No remaining `BinaryFormatter` usage in non-comment code | 15 |
 
-Score = (sum of earned points / 100) × 100
+Score = (sum of earned points / applicable-denominator) × 100
 
 **Note:** Sub-checks for features not applicable to the `targetVersion` (e.g. primary constructors check skipped for net6) are excluded from denominator.
+
+**Config-deferred items are scored NEUTRAL, not zero (v3.1):** if a config flag intentionally defers a modernization, **exclude that sub-check from the denominator** — do not score it 0. Specifically:
+- `enableNullable: false` → exclude the "Nullable reference types enabled" sub-check.
+- `modernizeHosting: false` → exclude the "Minimal hosting model adopted" sub-check.
+- (Apply the same logic to any future opt-in flag.)
+
+Record each deferral as a **low-priority recommendation**, not a defect. Rationale: penalizing the agent for honoring its own documented low-risk defaults misrepresents migration quality — a clean, fully-tested migration that deferred optional modernization should still grade in the A/B range, not be dragged to C/D by checks the operator explicitly turned off.
 
 ---
 
@@ -216,23 +223,27 @@ Score = (sum of earned points / 100) × 100
 
 ### Dimension 6 — Safety & Reversibility (5%)
 
+> **v3 model:** this pipeline is non-destructive by *output isolation* — the original source is never touched and IS the backup, so there is no `migration-backup/` folder. Score against the isolation model below (the legacy `backup-manifest.json` checks are retired).
+
+Start at 0 and sum:
+
 | Condition | Score |
 |---|---|
-| `migration-backup/` created with `backup-manifest.json` present | +40 |
-| All backup checksums verified (no `BACKUP_CORRUPTED` entries) | +30 |
-| Rollback was triggered and completed successfully | +20 (if applicable) |
-| Rollback was NOT needed (clean migration) | +30 |
-| `.migration/` audit folder present with all JSON outputs | +10 |
-| `migration-backup/` missing | −50 |
-| `backup-manifest.json` corrupted or missing | −30 |
-| Any file with `BACKUP_CORRUPTED` status | −20 per file (max −40) |
+| Original source verified untouched (no writes outside `migrated-output/{repoName}/`) | +50 |
+| `migrated-output/{repoName}/.migration/` audit folder present with all expected JSON outputs | +20 |
+| Clean migration — no rollback needed (or rollback completed correctly when triggered) | +20 |
+| Output is independently deletable / committed to a branch for auditability | +10 |
+| Any write detected to the original source tree | −60 |
+| Missing/partial `.migration/` audit artifacts | −10 each (max −30) |
+
+(A clean non-destructive run scores ~90–100 here. Do NOT penalize for the absence of `migration-backup/` — it is not part of the v3 design.)
 
 ---
 
 ## EXECUTION STEPS
 
 ### Step 1 — Load and Validate All Inputs
-- Read each `.migration/*.json` file.
+- Read each `migrated-output/{repoName}/.migration/*.json` file.
 - Note any missing files — reduce scoring confidence for affected dimensions.
 - Extract key metrics: `buildOutcome`, `testPassRate`, `todoCount`, `packagesNoCompatVersion`, etc.
 
@@ -264,7 +275,7 @@ Flag any of the following as `criticalIssues` (shown prominently in report, rega
 | `BinaryFormatter` TODO present in security-sensitive path (Auth, Crypto namespaces) | `SECURITY_SENSITIVE_TODO` |
 | Any package at `NoCompatibleVersion` used in production (non-test) project | `INCOMPATIBLE_PRODUCTION_DEPENDENCY` |
 | `testFrameworkOutdated: true` | `OUTDATED_TEST_FRAMEWORK` |
-| Backup missing | `NO_ROLLBACK_CAPABILITY` |
+| Any write detected to the original source tree | `SOURCE_MODIFIED` (violates output isolation) |
 | Any `CS8xxx` (nullable) errors in build output | `NULLABLE_SAFETY_VIOLATION` |
 | More than 20 TODO markers | `HIGH_TODO_DEBT` |
 
@@ -296,10 +307,10 @@ Group all recommendations into three tiers:
 | Score ≥ 90 and 0 critical issues | `Ready` |
 | Score ≥ 70 and 0 `HIGH` priority issues | `ConditionallyReady` |
 | Score ≥ 60 and ≤ 3 `HIGH` priority issues | `ProceedWithCaution` |
-| Score < 60 OR build failed OR backup missing | `NotReady` |
+| Score < 60 OR build failed OR original source modified | `NotReady` |
 
 ### Step 7 — Write `critique-report.json`
-Write to `.migration/`.
+Write to `migrated-output/{repoName}/.migration/`.
 
 ### Step 8 — Print Console Summary
 ```
@@ -343,7 +354,7 @@ Score this migration from .NET 6 to .NET 8
 Review the migration quality and tell me what needs fixing
 ```
 
-In standalone mode, the agent reads whatever `.migration/*.json` files are present and critiques based on available data. Missing files reduce confidence and are noted in the report.
+In standalone mode, the agent reads whatever `migrated-output/{repoName}/.migration/*.json` files are present and critiques based on available data. Missing files reduce confidence and are noted in the report.
 
 ---
 
@@ -397,7 +408,7 @@ The Reporting Agent includes the following section in `migration-report.md` usin
 
 | Failure | Action |
 |---|---|
-| Any `.migration/*.json` missing | Score affected dimension as 0, note data gap, continue |
+| Any `migrated-output/{repoName}/.migration/*.json` missing | Score affected dimension as 0, note data gap, continue |
 | All JSON files missing | Write critique with all dimensions scored 0 — pipeline was interrupted |
 | Cannot read modified `.cs` files for code modernization check | Skip sub-checks requiring file access, reduce denominator accordingly |
 | Score computation error | Default to 0 for that dimension, flag as `"scoringError": true` |
@@ -406,11 +417,11 @@ The Reporting Agent includes the following section in `migration-report.md` usin
 
 ## FORBIDDEN ACTIONS
 
-- ❌ Never modify source files, `.csproj` files, or any `.migration/` JSON files from other agents
+- ❌ Never modify source files, `.csproj` files, or any `migrated-output/{repoName}/.migration/` JSON files from other agents
 - ❌ Never halt the pipeline — always hand off to Reporting Agent regardless of score
 - ❌ Never give recommendations without citing specific evidence from the input JSON files
 - ❌ Never assign a grade of `A` if any `criticalIssues` are present
 
 ---
 
-*Agent Version: 1.0.0 | Read-only | Pipeline Step: 6.5 of 7*
+*Agent Version: 3.1.0 | Read-only | Pipeline Step: 6.5 of 7*

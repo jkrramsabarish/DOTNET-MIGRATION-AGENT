@@ -7,11 +7,11 @@
 
 ## IMMEDIATE ACTIONS — DO THESE AUTOMATICALLY, NO CONFIRMATION NEEDED
 
-- Load `solution-map.json` from `migrated-output/.migration/` before doing anything else.
-- Read package references from the **original source** `.csproj` files — do not read from `migrated-output/` yet (those are unmodified copies at this stage).
+- Load `solution-map.json` from `migrated-output/{repoName}/.migration/` before doing anything else.
+- Read package references from the **original source** `.csproj` files — do not read from `migrated-output/{repoName}/` yet (those are unmodified copies at this stage).
 - Query NuGet API for every package found — do not rely on cached or training-data package versions.
 - Resolve compatible versions against `targetVersion` TFM automatically.
-- Write `dependency-report.json` to `migrated-output/.migration/` on completion.
+- Write `dependency-report.json` to `migrated-output/{repoName}/.migration/` on completion.
 - Never modify any `.csproj` file — resolution only, no edits. Edits happen in `code-refactoring-agent.md`.
 - If NuGet API is unreachable, fall back to the offline compatibility matrix embedded in the Skills section below.
 
@@ -21,7 +21,7 @@
 
 ```
 READ from:   original source project .csproj files
-WRITE to:    migrated-output/.migration/dependency-report.json
+WRITE to:    migrated-output/{repoName}/.migration/dependency-report.json
 
 Never modify any file in the original source project.
 Never modify any .csproj file — this agent produces a report only.
@@ -38,8 +38,8 @@ Never modify any .csproj file — this agent produces a report only.
 | Pipeline Position | Step 2 of 7 |
 | Mode | Read + network (NuGet API queries) — no file modifications |
 | Invoked By | Migration Orchestrator Agent |
-| Reads | `migrated-output/.migration/solution-map.json`, original source `.csproj` files |
-| Writes | `migrated-output/.migration/dependency-report.json` |
+| Reads | `migrated-output/{repoName}/.migration/solution-map.json`, original source `.csproj` files |
+| Writes | `migrated-output/{repoName}/.migration/dependency-report.json` |
 
 ---
 
@@ -53,7 +53,7 @@ Build a complete NuGet dependency graph for the entire solution. For every `<Pac
 
 | Input | Source | Required |
 |---|---|---|
-| `migrated-output/.migration/solution-map.json` | Previous agent output | ✅ |
+| `migrated-output/{repoName}/.migration/solution-map.json` | Previous agent output | ✅ |
 | `targetVersion` TFM token | Orchestrator context | ✅ |
 | NuGet v3 API | `https://api.nuget.org/v3/index.json` | Optional (falls back to matrix) |
 | Each `.csproj` file | Original source filesystem | ✅ |
@@ -62,7 +62,7 @@ Build a complete NuGet dependency graph for the entire solution. For every `<Pac
 
 ## OUTPUTS
 
-**Primary output:** `migrated-output/.migration/dependency-report.json`
+**Primary output:** `migrated-output/{repoName}/.migration/dependency-report.json`
 
 ```json
 {
@@ -75,7 +75,7 @@ Build a complete NuGet dependency graph for the entire solution. For every `<Pac
       "resolvedVersion": "8.0.0",
       "status": "Upgradeable",
       "usedInProjects": ["src/Web/Web.csproj", "src/Infrastructure/Infrastructure.csproj"],
-      "outputProjectPaths": ["migrated-output/src/Web/Web.csproj", "migrated-output/src/Infrastructure/Infrastructure.csproj"],
+      "outputProjectPaths": ["migrated-output/eShopOnWeb/src/Web/Web.csproj", "migrated-output/eShopOnWeb/src/Infrastructure/Infrastructure.csproj"],
       "breaking": false,
       "notes": ""
     },
@@ -85,7 +85,7 @@ Build a complete NuGet dependency graph for the entire solution. For every `<Pac
       "resolvedVersion": "13.0.3",
       "status": "Upgradeable",
       "usedInProjects": ["src/Web/Web.csproj"],
-      "outputProjectPaths": ["migrated-output/src/Web/Web.csproj"],
+      "outputProjectPaths": ["migrated-output/eShopOnWeb/src/Web/Web.csproj"],
       "breaking": false,
       "notes": "Consider migrating to System.Text.Json for native .NET 8 support"
     },
@@ -95,7 +95,7 @@ Build a complete NuGet dependency graph for the entire solution. For every `<Pac
       "resolvedVersion": null,
       "status": "NoCompatibleVersion",
       "usedInProjects": ["src/Infrastructure/Infrastructure.csproj"],
-      "outputProjectPaths": ["migrated-output/src/Infrastructure/Infrastructure.csproj"],
+      "outputProjectPaths": ["migrated-output/eShopOnWeb/src/Infrastructure/Infrastructure.csproj"],
       "breaking": true,
       "notes": "No version compatible with net8.0. Manual replacement required."
     }
@@ -110,14 +110,14 @@ Build a complete NuGet dependency graph for the entire solution. For every `<Pac
 }
 ```
 
-Note: `outputProjectPaths` tells `code-refactoring-agent.md` exactly which files in `migrated-output/` to edit.
+Note: `outputProjectPaths` tells `code-refactoring-agent.md` exactly which files in `migrated-output/{repoName}/` to edit.
 
 ---
 
 ## EXECUTION STEPS
 
 ### Step 1 — Load `solution-map.json`
-- Read from `migrated-output/.migration/solution-map.json`.
+- Read from `migrated-output/{repoName}/.migration/solution-map.json`.
 - Read all projects and their `PackageReference` lists from the **original source** `.csproj` files.
 - Deduplicate packages across projects — track which projects use each package.
 - Build master package list: `{ name, currentVersion, usedInProjects[], outputProjectPaths[] }`.
@@ -136,7 +136,7 @@ For each package, determine its category to apply the correct resolution strateg
 | System.* packages | System.Text.Json, etc. | Check if now inbox (built into runtime) |
 
 ### Step 3 — Check Inbox Packages (Built into Target Runtime)
-Some packages that were NuGet dependencies in older versions are now **built into the .NET runtime** at `targetVersion`. These should be **removed** from `migrated-output/` `.csproj` files, not upgraded.
+Some packages that were NuGet dependencies in older versions are now **built into the .NET runtime** at `targetVersion`. These should be **removed** from `migrated-output/{repoName}/` `.csproj` files, not upgraded.
 
 **Known inbox packages by version:**
 
@@ -148,7 +148,7 @@ Some packages that were NuGet dependencies in older versions are now **built int
 | `System.Diagnostics.DiagnosticSource` | .NET 6+ |
 | `System.Runtime.CompilerServices.Unsafe` | .NET 6+ |
 
-Flag these as `status: "NowInbox"` — `code-refactoring-agent.md` will remove the `<PackageReference>` from files in `migrated-output/`.
+Flag these as `status: "NowInbox"` — `code-refactoring-agent.md` will remove the `<PackageReference>` from files in `migrated-output/{repoName}/`.
 
 ### Step 4 — Resolve Compatible Versions via NuGet API
 
@@ -160,6 +160,13 @@ GET https://api.nuget.org/v3-flatcontainer/{package-id-lowercase}/index.json
 - Filter to versions that support `targetVersion` TFM.
 - Select the highest stable version (no pre-release unless `allowPrerelease: true` in config).
 - If no compatible version exists → status: `NoCompatibleVersion`.
+
+**CRITICAL — validate the resolved version actually exists for the target TFM (do not guess a number):**
+- The `Microsoft.Extensions.*` runtime packages (`Configuration.*`, `Logging.*`, `DependencyInjection.Abstractions`, etc.) follow the **runtime** patch cadence, NOT the ASP.NET Core cadence. `Microsoft.AspNetCore.*` and `Microsoft.EntityFrameworkCore.*` ship high patch numbers (e.g. `8.0.28`); the matching `Microsoft.Extensions.*` patch usually tops out far lower (e.g. `8.0.0`–`8.0.3`). **Pin each `Microsoft.Extensions.*` package to the highest version that exists within the `8.0.x` band** — do not copy the AspNetCore patch number. If you request a non-existent version, NuGet silently resolves *upward across the major boundary* (e.g. `8.0.28` → `9.0.0`, pulling .NET 9 assemblies into a net8 app, emitting NU1603).
+- Always confirm the exact version is listed in the flat-container `index.json` before writing it to `dependency-report.json`. Pinning a too-low version can trigger `NU1605` downgrade errors via transitive dependencies; pinning the highest in-band patch avoids both NU1603 and NU1605.
+- Flag any package whose `index.json` reports a known advisory (NuGet `NU1903`) — e.g. `AutoMapper` 12.0.1 — as a `securityAdvisory` note with a patched-version recommendation.
+
+**Detect `FrameworkReference` needs (class libraries):** if a non-web project (`Microsoft.NET.Sdk`) references ASP.NET Core types (e.g. `IWebHostEnvironment`, `IdentityDbContext`, `AddDefaultIdentity`, MVC types) — typically because a now-removed package used to pull them transitively — record `requiresFrameworkReference: "Microsoft.AspNetCore.App"` so `code-refactoring-agent.md` adds `<FrameworkReference>` instead of hunting for a package. Note that `IdentityDbContext` / `AddEntityFrameworkStores` still require the **package** `Microsoft.AspNetCore.Identity.EntityFrameworkCore` (not in the shared framework), and `AddDefaultUI`/`AddDefaultIdentity` require the **package** `Microsoft.AspNetCore.Identity.UI`.
 
 ### Step 5 — Apply Known Replacement Mappings
 Some deprecated packages have standard modern replacements:
@@ -173,6 +180,12 @@ Some deprecated packages have standard modern replacements:
 | `Microsoft.EntityFrameworkCore.Tools` | Keep, upgrade to target major | n/a |
 | `NETStandard.Library` | Remove (no longer needed for net5.0+) | .NET 5+ |
 | `Microsoft.NETCore.App` | Remove (implicit SDK reference) | .NET 5+ |
+| `Microsoft.AspNetCore.App` (2.x metapackage, **no version**) | Remove (implicit in Web SDK) / `<FrameworkReference>` for non-web | 3.0+ |
+| `Microsoft.AspNetCore.Razor.Design` | Remove (in SDK) | 3.0+ |
+| `Microsoft.AspNetCore.ApiAuthorization.IdentityServer` | `Duende.IdentityServer` (manual; mark `NoCompatibleVersion`) | net8+ (no direct upgrade) |
+| `IdentityServer4.*` | `Duende.IdentityServer` (manual) | net8+ |
+| `dotnet-xunit` (DotNetCliToolReference) | Remove (obsolete on net8 SDK) | all |
+| `System.Security.Claims` / `System.Threading.Tasks.Extensions` (and similar inbox) | Remove (inbox) | Core/5+ |
 
 ### Step 6 — Detect Transitive Dependency Conflicts
 - For each resolved upgrade, check if two projects require conflicting versions of the same transitive dependency.
@@ -180,7 +193,7 @@ Some deprecated packages have standard modern replacements:
 - Recommend a common version that satisfies both where possible.
 
 ### Step 7 — Write `dependency-report.json`
-- Write to `migrated-output/.migration/`.
+- Write to `migrated-output/{repoName}/.migration/`.
 - Print summary to developer:
   ```
   ✅ Dependency Mapping Complete
@@ -188,7 +201,7 @@ Some deprecated packages have standard modern replacements:
      Upgradeable:              21
      Now inbox (remove):        1
      No compatible version:     1 ⚠️
-     Output: migrated-output/.migration/dependency-report.json
+     Output: migrated-output/{repoName}/.migration/dependency-report.json
      Proceeding to API Compatibility Check...
   ```
 
@@ -248,9 +261,9 @@ Used when NuGet API is unreachable. Known-good version mappings:
 
 | Agent | Interaction |
 |---|---|
-| Codebase Analysis Agent | Reads `solution-map.json` from `migrated-output/.migration/` for project + package list |
-| API Compatibility Agent | Reads `dependency-report.json` from `migrated-output/.migration/` |
-| Code Refactoring Agent | Reads `dependency-report.json` and uses `outputProjectPaths` to apply `<PackageReference>` version updates in `migrated-output/` |
+| Codebase Analysis Agent | Reads `solution-map.json` from `migrated-output/{repoName}/.migration/` for project + package list |
+| API Compatibility Agent | Reads `dependency-report.json` from `migrated-output/{repoName}/.migration/` |
+| Code Refactoring Agent | Reads `dependency-report.json` and uses `outputProjectPaths` to apply `<PackageReference>` version updates in `migrated-output/{repoName}/` |
 
 ---
 
@@ -259,10 +272,43 @@ Used when NuGet API is unreachable. Known-good version mappings:
 | Failure | Action |
 |---|---|
 | NuGet API unreachable | Fall back to offline matrix; flag in report as "Resolved offline — verify before build" |
-| Package has no compatible version | Set `status: "NoCompatibleVersion"`, continue; `code-refactoring-agent.md` will insert TODO comment in `migrated-output/` copy |
+| Package has no compatible version | Set `status: "NoCompatibleVersion"`, continue; `code-refactoring-agent.md` will insert TODO comment in `migrated-output/{repoName}/` copy |
 | Transitive conflict with no resolution | Flag both versions, recommend lowest common version, continue |
 | Malformed `.nuspec` | Skip transitive analysis for that package, log warning |
 
 ---
 
-*Agent Version: 2.1.0 | Read source + NuGet API | Writes to migrated-output/.migration/ | Pipeline Step: 2 of 7*
+## FAST-PATH RESOLUTION (v3.1 — avoid per-package NuGet round-trips)
+
+Resolve from the tables below FIRST. Only call the NuGet API for packages NOT listed here, or when a note says "verify". This removes the bulk of network round-trips.
+
+### Microsoft runtime / framework families — pin to the target's patch band
+For target `netX.0`, pin every `Microsoft.AspNetCore.*`, `Microsoft.EntityFrameworkCore.*`, and `Microsoft.AspNetCore.Identity.*` package to the **same** latest patch in the `X.0.*` band — they ship in lockstep.
+- If the prompt gives an explicit patch (e.g. `8.0.28`), use it for these families.
+- `Microsoft.Extensions.*` runtime packages (Configuration/Logging/DependencyInjection/Hosting) follow the **runtime** cadence and usually top out at a LOWER patch than AspNetCore. Pin them to the highest `X.0.*` that actually exists — never copy the AspNetCore patch (requesting a non-existent patch makes NuGet bump *across the major*, e.g. `8.0.28 → 9.0.0`, emitting NU1603; too low triggers NU1605 downgrades).
+
+### Common third-party — known compatible majors (net6 → net9)
+| Package | net6 | net7 | net8 | net9 | Notes |
+|---|---|---|---|---|---|
+| xunit | 2.9.x | 2.9.x | 2.9.x | 2.9.x | pair with xunit.runner.visualstudio 2.8.x |
+| Microsoft.NET.Test.Sdk | 17.x | 17.x | 17.12.0 | 17.12.0 | 18.x needs newer tooling — prefer 17.12.0 for SDK 8.0.x |
+| Moq | 4.20.x | 4.20.x | 4.20.x | 4.20.x | |
+| Swashbuckle.AspNetCore | 6.5+ | 6.5+ | 6.9.0 | 7.x | stay on 6.x for net8 stability; `Info`→`OpenApiInfo` |
+| AutoMapper | 12.x | 12.x | 12.x | 13.x | 13+ merges DI ext & changes registration; NU1903 on 12.0.1 |
+| FluentValidation | 11.x | 11.x | 11.x | 11.x | `ValidationContext<T>`; `AddFluentValidationAutoValidation` |
+| MediatR | 12.x | 12.x | 12.x | 12.x | `RegisterServicesFromAssembly`; Handle arg reorder |
+| Serilog | 3.x | 3.x | 3.x | 4.x | |
+| Polly | 8.x | 8.x | 8.x | 8.x | |
+| Ardalis.GuardClauses | 4.x | 4.x | 4.6.0 | 5.x | netstandard2.0+net; `Against.Null/NullOrEmpty/OutOfRange` + `IGuardClause` stable |
+
+(Refresh these opportunistically; treat as "known-good" defaults, not a hard ceiling.)
+
+## DEAD-REFERENCE DETECTION (v3.1 — don't migrate what isn't used)
+
+Before resolving an upgrade, grep the codebase for the package's root namespace/types. If **nothing references it**, mark `status: "RemoveUnused"` and drop it instead of upgrading — this eliminates whole compatibility risks at zero cost.
+- Scan `*.cs` for the package's root namespace (e.g. a scaffolding/design-time package, a metapackage leftover, an MVC reference in a pure unit-test project, an `*.Extensions` helper whose call sites are commented out).
+- Frequent dead refs in legacy projects: `Microsoft.CodeAnalysis` (pulled in, unused), `Microsoft.AspNetCore.Mvc` in unit tests, EF-helper extension packages superseded by built-ins, console test runners.
+
+---
+
+*Agent Version: 3.1.0 | Read source + NuGet API (fast-path table first) | Writes to migrated-output/{repoName}/.migration/ | Pipeline Step: 2 of 7*
