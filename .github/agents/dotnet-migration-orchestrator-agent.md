@@ -160,7 +160,7 @@ This is the **central controller agent** for migrating a .NET codebase from any 
 
 ### Option 1 — Inline Prompt (takes precedence over config)
 ```
-Migrate the project in ./eShopOnWeb from .NET 6 to .NET 8 using agent.md
+Migrate the project in ./eShopOnWeb from .NET 6 to .NET 8 using dotnet-migration-orchestrator-agent.md
 ```
 If versions are given both here and in `migration.config.json`, the inline prompt wins.
 
@@ -517,7 +517,7 @@ Migrate all files in ./MyServices/ from .NET 6 to .NET 8
 
 ### Full Project (cloned or copy-pasted repo)
 ```
-Migrate the project in ./eShopOnWeb from .NET 6 to .NET 8 using agent.md
+Migrate the project in ./eShopOnWeb from .NET 6 to .NET 8 using dotnet-migration-orchestrator-agent.md
 ```
 → Runs all steps 1–7. Output: `migrated-output/eShopOnWeb/`
 

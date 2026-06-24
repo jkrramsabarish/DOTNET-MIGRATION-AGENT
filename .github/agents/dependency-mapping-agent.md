@@ -1,6 +1,6 @@
 # Dependency Mapping Agent
 
-> **Called by:** `agent.md` (Migration Orchestrator)
+> **Called by:** `dotnet-migration-orchestrator-agent.md` (Migration Orchestrator)
 > **Do not invoke this file directly.** The orchestrator loads it automatically at pipeline step 2.
 
 ---

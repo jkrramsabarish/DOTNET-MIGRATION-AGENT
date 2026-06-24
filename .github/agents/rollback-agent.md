@@ -1,6 +1,6 @@
 # Rollback Agent
 
-> **Called by:** `agent.md` (Migration Orchestrator) and `build-compilation-agent.md`
+> **Called by:** `dotnet-migration-orchestrator-agent.md` (Migration Orchestrator) and `build-compilation-agent.md`
 > **Do not invoke this file directly during normal pipeline flow.**
 > This agent is invoked automatically when the build fails, or can be invoked manually by the developer.
 

@@ -1,7 +1,7 @@
 # TestMigrationApp — Sample Repo for Testing the Migration Pipeline
 
 This is a deliberately small, deliberately broken .NET **6.0** solution, built to give
-your migration agents (`agent.md` + the 7 sub-agents) real, easy-to-verify work to do
+your migration agents (`dotnet-migration-orchestrator-agent.md` + the 7 sub-agents) real, easy-to-verify work to do
 without needing a 30-minute real-world codebase.
 
 ## What's inside
@@ -27,7 +27,7 @@ These map directly to rules already defined in `api-compatibility-agent.md`:
 
 ## How to use it
 
-1. Unzip this next to your `agent.md` and the other 7 agent files (or point your AI
+1. Unzip this next to your `dotnet-migration-orchestrator-agent.md` and the other 7 agent files (or point your AI
    assistant's working directory at it).
 2. In Copilot / Claude Code, say:
    ```

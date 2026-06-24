@@ -1,6 +1,6 @@
 # Migration Critique Agent
 
-> **Called by:** `agent.md` (Migration Orchestrator)
+> **Called by:** `dotnet-migration-orchestrator-agent.md` (Migration Orchestrator)
 > **Do not invoke this file directly.** The orchestrator loads it automatically at pipeline step 6.5 — between test execution and report generation.
 > **Alternatively:** Can be invoked standalone with `"Critique the migration for this project"` after the pipeline has run.
 
