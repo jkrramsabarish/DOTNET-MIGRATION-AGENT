@@ -148,7 +148,7 @@ This is the **central controller agent** for migrating a .NET codebase from any 
 | Property | Value |
 |---|---|
 | Agent Name | Migration Orchestrator Agent |
-| Version | 3.0.0 |
+| Version | 3.1.0 |
 | Compatible Source Versions | .NET Framework 4.x, .NET Core 2.x / 3.x, .NET 5, .NET 6, .NET 7, .NET 8 |
 | Compatible Target Versions | .NET Core 3.1, .NET 5, .NET 6, .NET 7, .NET 8, .NET 9 |
 | Repo Scale | Single file → Enterprise multi-solution monorepos |
@@ -275,7 +275,10 @@ Sub-agents are loaded and invoked based on the detected migration mode. Each age
    ▼
 [5] build-compilation-agent.md
    → Runs: dotnet build migrated-output/{repoName}/ --configuration Release
-   → FAIL → rollback-agent.md (deletes migrated-output/{repoName}/ only) → STOP
+   → FAIL → Build→Fix loop (feed errors to code-refactoring-agent.md, ≤ maxBuildFixIterations)
+            → still red? honor rollbackOnFailure:
+                • false (DEFAULT) → preserve output, continue to [7] reporting-agent.md
+                • true (opt-in)  → rollback-agent.md (deletes migrated-output/{repoName}/) → STOP
    → PASS → continue
    → Output: migrated-output/{repoName}/.migration/build-result.json
    │

@@ -43,13 +43,15 @@ This agent does NOT decide whether the migration is "done" — it evaluates whet
 
 | Input | Source | Required |
 |---|---|---|
-| `migrated-output/{repoName}/.migration/solution-map.json` | Step 1 agent | ✅ |
-| `migrated-output/{repoName}/.migration/dependency-report.json` | Step 2 agent | ✅ |
-| `migrated-output/{repoName}/.migration/compatibility-report.json` | Step 3 agent | ✅ |
-| `migrated-output/{repoName}/.migration/refactoring-summary.json` | Step 4 agent | ✅ |
-| `migrated-output/{repoName}/.migration/build-result.json` | Step 5 agent | ✅ |
+| `migrated-output/{repoName}/.migration/solution-map.json` | Step 1 agent | ✅ Full Project only (absent in Multi-File) |
+| `migrated-output/{repoName}/.migration/dependency-report.json` | Step 2 agent | ✅ Full Project only (absent in Multi-File) |
+| `migrated-output/{repoName}/.migration/compatibility-report.json` | Step 3 agent | ✅ All modes critique runs in |
+| `migrated-output/{repoName}/.migration/refactoring-summary.json` | Step 4 agent | ✅ All modes critique runs in |
+| `migrated-output/{repoName}/.migration/build-result.json` | Step 5 agent | ✅ Full Project only (absent in Multi-File) |
 | `migrated-output/{repoName}/.migration/test-result.json` | Step 6 agent | Optional |
 | Modified `.cs` source files | Filesystem | Optional (for deep critique) |
+
+> **Critique runs in Full Project and Multi-File modes only** (it is skipped in Single-File mode — see orchestrator). In **Multi-File** mode the build/test/dependency steps never ran, so `solution-map.json`, `dependency-report.json`, `build-result.json`, and `test-result.json` are legitimately absent. **Do not score their dimensions 0** — see "Multi-File (Limited) Scoring" below.
 
 ---
 
@@ -108,6 +110,21 @@ The agent evaluates migration quality across **6 weighted dimensions**. Each dim
 | 70–79 | C | Acceptable — some risks present |
 | 60–69 | D | Poor — significant gaps, proceed with caution |
 | 0–59 | F | Failing — do not ship without remediation |
+
+---
+
+## MULTI-FILE (LIMITED) SCORING — re-weight, do NOT zero out absent dimensions
+
+In **Multi-File** mode there is no project, so steps 1, 2, 5, 6 never run and their reports do not exist. Scoring only the dimensions whose data is actually available is the correct behavior — **excluding** the inapplicable dimensions from the weighted sum, not scoring them 0 (zeroing would unfairly grade every multi-file run as F).
+
+Score only these dimensions and **renormalize their weights to sum to 100%**:
+
+| Dimension | Full Project weight | Multi-File weight (renormalized) | Data source |
+|---|---|---|---|
+| Code Modernization | 20% | **66.7%** | `compatibility-report.json` + modified `.cs` files |
+| TODO Debt | 10% | **33.3%** | `refactoring-summary.json` |
+
+Build Integrity, Test Coverage, Dependency Health, and Safety & Reversibility are **excluded from the denominator** in Multi-File mode (no build, no tests, no package resolution). Note in the report: *"Limited critique — build/test/dependency dimensions are N/A for Multi-File mode."* Set `"scoringMode": "MultiFileLimited"` in `critique-report.json`. Shipping readiness in this mode tops out at `ConditionallyReady` (cannot be `Ready` without a passing build).
 
 ---
 
@@ -408,7 +425,8 @@ The Reporting Agent includes the following section in `migration-report.md` usin
 
 | Failure | Action |
 |---|---|
-| Any `migrated-output/{repoName}/.migration/*.json` missing | Score affected dimension as 0, note data gap, continue |
+| A report missing **in Full Project mode** (pipeline ran but a step's output is absent) | Score affected dimension as 0, note data gap, continue |
+| A report missing **because its step was skipped in Multi-File mode** (`solution-map`/`dependency-report`/`build-result`/`test-result`) | **Exclude** that dimension from the denominator — do NOT score 0. Apply Multi-File (Limited) Scoring above |
 | All JSON files missing | Write critique with all dimensions scored 0 — pipeline was interrupted |
 | Cannot read modified `.cs` files for code modernization check | Skip sub-checks requiring file access, reduce denominator accordingly |
 | Score computation error | Default to 0 for that dimension, flag as `"scoringError": true` |

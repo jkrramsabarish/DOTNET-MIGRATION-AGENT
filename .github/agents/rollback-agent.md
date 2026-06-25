@@ -2,7 +2,7 @@
 
 > **Called by:** `dotnet-migration-orchestrator-agent.md` (Migration Orchestrator) and `build-compilation-agent.md`
 > **Do not invoke this file directly during normal pipeline flow.**
-> This agent is invoked automatically when the build fails, or can be invoked manually by the developer.
+> This agent runs **only when `rollbackOnFailure: true`** is explicitly set and the build is still red after the build→fix loop. On the default (`rollbackOnFailure: false`) the output is preserved and this agent is never called. It can also be invoked manually by the developer.
 
 ---
 
@@ -35,9 +35,9 @@ clean up the failed migrated-output/{repoName}/ folder.
 |---|---|
 | Agent Name | Rollback Agent |
 | Role | Delete the failing repo's output folder — scope limited to `migrated-output/{repoName}/` |
-| Pipeline Position | Invoked on demand (after step 5 build failure) |
+| Pipeline Position | Invoked on demand (after step 5 build→fix loop fails AND `rollbackOnFailure: true`) |
 | Mode | Delete — removes `migrated-output/{repoName}/` only |
-| Invoked By | Build & Compilation Agent (auto on build failure), or developer (manual) |
+| Invoked By | Build & Compilation Agent (only when `rollbackOnFailure: true`), or developer (manual) |
 | Reads | `{repoName}` from orchestrator context |
 | Deletes | `migrated-output/{repoName}/` |
 | Never Touches | Any other folder in `migrated-output/`, any source file |
@@ -146,7 +146,7 @@ rm -rf migrated-output/{repoName}/
 |---|---|
 | Build & Compilation Agent | Primary invoker — triggered automatically on build failure |
 | Migration Orchestrator | Receives halt signal after rollback completes |
-| Reporting Agent | NOT invoked after rollback — no report is generated for a failed migration |
+| Reporting Agent | NOT invoked after rollback — but rollback only runs on the explicit `rollbackOnFailure: true` path. On the **default** `rollbackOnFailure: false` path this agent is never called: the output is preserved and `reporting-agent.md` runs to report the remaining errors/TODOs |
 
 ---
 
@@ -170,4 +170,4 @@ rm -rf migrated-output/{repoName}/
 
 ---
 
-*Agent Version: 3.0.0 | Repo-scoped deletion only | Invoked by build failure or developer command*
+*Agent Version: 3.1.0 | Repo-scoped deletion only | Invoked only when rollbackOnFailure:true, or by developer command*

@@ -11,7 +11,7 @@
 - Use `--configuration Release` and `--no-incremental` flags for a clean build.
 - Capture the full MSBuild output — do not truncate error logs.
 - Classify every error and warning by category before writing output.
-- If build FAILS: invoke `rollback-agent.md` automatically and halt the pipeline.
+- If build FAILS: do NOT roll back immediately. First run the **Build → Fix Loop (Step 8)** — hand classified errors to `code-refactoring-agent.md` and rebuild, up to `maxBuildFixIterations` (default 6). Only if it is still red after the loop do you honor `rollbackOnFailure`: default `false` → **preserve** `migrated-output/{repoName}/` and continue to `reporting-agent.md`; `true` (explicit opt-in) → invoke `rollback-agent.md` and halt.
 - If build PASSES: write `build-result.json` to `migrated-output/{repoName}/.migration/` and signal the orchestrator to proceed.
 - Never attempt to fix build errors directly — errors are fed back to `code-refactoring-agent.md` for a targeted retry if configured.
 
@@ -275,8 +275,8 @@ Always tell the developer how many iterations were used (`buildIterationsToGreen
 |---|---|
 | SDK not installed | Halt, report SDK version and download link, do NOT rollback (source unchanged) |
 | NuGet restore fails for `migrated-output/{repoName}/` | Halt, report missing packages, do NOT rollback (source unchanged) |
-| Build fails on first attempt | Invoke rollback (clear `migrated-output/{repoName}/`), write error report, halt |
-| Build fails on retry | Invoke rollback, write error report with both attempt logs, halt |
+| Build fails on first attempt | Do NOT rollback. Enter the Build → Fix Loop (Step 8): classify errors, hand them to `code-refactoring-agent.md`, rebuild |
+| Build still failing after `maxBuildFixIterations` | Write `build-result.json` (`"outcome": "Failed"` + `buildIterationsToGreen`). Then honor `rollbackOnFailure`: `false` (**default**) → preserve output + continue to `reporting-agent.md` with remaining errors/TODOs; `true` → invoke `rollback-agent.md`, then halt |
 | `dotnet` CLI not found in PATH | Halt immediately, report: "dotnet CLI not found. Install .NET SDK." |
 
 ---

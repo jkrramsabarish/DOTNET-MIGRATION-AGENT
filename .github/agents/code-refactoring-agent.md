@@ -254,7 +254,9 @@ HttpContext.Current.Request.QueryString["id"]
 Only apply if:
 - `sourceVersion` ≤ `net5.0`
 - `Startup.cs` exists in `migrated-output/{repoName}/`
-- `migration.config.json` has `"migrateStartup": true` OR user confirmed in prompt
+- `migration.config.json` has `"modernizeHosting": true` OR user confirmed in prompt
+
+> This is the same `modernizeHosting` flag used in Step 2h — both gate the identical Startup→minimal-hosting consolidation. Default is `false` (retain the Generic Host + `Startup` model, which still compiles and runs on net8).
 
 Work entirely on `migrated-output/{repoName}/src/.../Startup.cs` and `migrated-output/{repoName}/src/.../Program.cs`.
 Original `Startup.cs` in source is never touched.
