@@ -1,19 +1,19 @@
-# Migration Critique Agent
+# Migration Critic Agent
 
-> **Called by:** `dotnet-migration-orchestrator-agent.md` (Migration Orchestrator)
+> **Called by:** `dotnet-migration-orchestrator-agent.agent.md` (Migration Orchestrator)
 > **Do not invoke this file directly.** The orchestrator loads it automatically at pipeline step 6.5 — between test execution and report generation.
-> **Alternatively:** Can be invoked standalone with `"Critique the migration for this project"` after the pipeline has run.
+> **Alternatively:** Can be invoked standalone with `"Critic the migration for this project"` after the pipeline has run.
 
 ---
 
 ## IMMEDIATE ACTIONS — DO THESE AUTOMATICALLY, NO CONFIRMATION NEEDED
 
-- Load ALL available `migrated-output/{repoName}/.migration/*.json` files on invocation — never critique with partial data.
+- Load ALL available `migrated-output/{repoName}/.migration/*.json` files on invocation — never critic with partial data.
 - Score each dimension using the rubrics defined below — do not skip any dimension even if data is sparse.
 - Never modify source files — this agent is READ-ONLY.
 - Never block the pipeline — even a score of 0/100 must pass control to the Reporting Agent.
-- Write `critique-report.json` to `migrated-output/{repoName}/.migration/` on completion.
-- Surface the critique summary inside `migration-report.md` (passed to Reporting Agent via the JSON output).
+- Write `critic-report.json` to `migrated-output/{repoName}/.migration/` on completion.
+- Surface the critic summary inside `migration-report.md` (passed to Reporting Agent via the JSON output).
 
 ---
 
@@ -21,13 +21,13 @@
 
 | Property | Value |
 |---|---|
-| Agent Name | Migration Critique Agent |
+| Agent Name | Migration Critic Agent |
 | Role | Evaluate migration quality across 6 dimensions, assign scores, and produce actionable recommendations |
 | Pipeline Position | Step 6.5 of 7 (between Test Execution and Reporting) |
 | Mode | Read-only — no file modifications |
 | Invoked By | Migration Orchestrator Agent (or developer directly) |
 | Reads | All `migrated-output/{repoName}/.migration/*.json` files, modified `.cs` files (for code quality checks), `migrated-output/{repoName}/.migration/migration-report.md` (if partial) |
-| Writes | `migrated-output/{repoName}/.migration/critique-report.json` |
+| Writes | `migrated-output/{repoName}/.migration/critic-report.json` |
 
 ---
 
@@ -45,23 +45,23 @@ This agent does NOT decide whether the migration is "done" — it evaluates whet
 |---|---|---|
 | `migrated-output/{repoName}/.migration/solution-map.json` | Step 1 agent | ✅ Full Project only (absent in Multi-File) |
 | `migrated-output/{repoName}/.migration/dependency-report.json` | Step 2 agent | ✅ Full Project only (absent in Multi-File) |
-| `migrated-output/{repoName}/.migration/compatibility-report.json` | Step 3 agent | ✅ All modes critique runs in |
-| `migrated-output/{repoName}/.migration/refactoring-summary.json` | Step 4 agent | ✅ All modes critique runs in |
+| `migrated-output/{repoName}/.migration/compatibility-report.json` | Step 3 agent | ✅ All modes critic runs in |
+| `migrated-output/{repoName}/.migration/refactoring-summary.json` | Step 4 agent | ✅ All modes critic runs in |
 | `migrated-output/{repoName}/.migration/build-result.json` | Step 5 agent | ✅ Full Project only (absent in Multi-File) |
 | `migrated-output/{repoName}/.migration/test-result.json` | Step 6 agent | Optional |
-| Modified `.cs` source files | Filesystem | Optional (for deep critique) |
+| Modified `.cs` source files | Filesystem | Optional (for deep critic) |
 
-> **Critique runs in Full Project and Multi-File modes only** (it is skipped in Single-File mode — see orchestrator). In **Multi-File** mode the build/test/dependency steps never ran, so `solution-map.json`, `dependency-report.json`, `build-result.json`, and `test-result.json` are legitimately absent. **Do not score their dimensions 0** — see "Multi-File (Limited) Scoring" below.
+> **Critic runs in Full Project and Multi-File modes only** (it is skipped in Single-File mode — see orchestrator). In **Multi-File** mode the build/test/dependency steps never ran, so `solution-map.json`, `dependency-report.json`, `build-result.json`, and `test-result.json` are legitimately absent. **Do not score their dimensions 0** — see "Multi-File (Limited) Scoring" below.
 
 ---
 
 ## OUTPUT
 
-**Primary output:** `migrated-output/{repoName}/.migration/critique-report.json`
+**Primary output:** `migrated-output/{repoName}/.migration/critic-report.json`
 
 ```json
 {
-  "critiqueTimestamp": "2026-01-15T10:49:00Z",
+  "criticTimestamp": "2026-01-15T10:49:00Z",
   "sourceVersion": "net6.0",
   "targetVersion": "net8.0",
   "overallScore": 74,
@@ -124,7 +124,7 @@ Score only these dimensions and **renormalize their weights to sum to 100%**:
 | Code Modernization | 20% | **66.7%** | `compatibility-report.json` + modified `.cs` files |
 | TODO Debt | 10% | **33.3%** | `refactoring-summary.json` |
 
-Build Integrity, Test Coverage, Dependency Health, and Safety & Reversibility are **excluded from the denominator** in Multi-File mode (no build, no tests, no package resolution). Note in the report: *"Limited critique — build/test/dependency dimensions are N/A for Multi-File mode."* Set `"scoringMode": "MultiFileLimited"` in `critique-report.json`. Shipping readiness in this mode tops out at `ConditionallyReady` (cannot be `Ready` without a passing build).
+Build Integrity, Test Coverage, Dependency Health, and Safety & Reversibility are **excluded from the denominator** in Multi-File mode (no build, no tests, no package resolution). Note in the report: *"Limited critic — build/test/dependency dimensions are N/A for Multi-File mode."* Set `"scoringMode": "MultiFileLimited"` in `critic-report.json`. Shipping readiness in this mode tops out at `ConditionallyReady` (cannot be `Ready` without a passing build).
 
 ---
 
@@ -326,13 +326,13 @@ Group all recommendations into three tiers:
 | Score ≥ 60 and ≤ 3 `HIGH` priority issues | `ProceedWithCaution` |
 | Score < 60 OR build failed OR original source modified | `NotReady` |
 
-### Step 7 — Write `critique-report.json`
+### Step 7 — Write `critic-report.json`
 Write to `migrated-output/{repoName}/.migration/`.
 
 ### Step 8 — Print Console Summary
 ```
 ═══════════════════════════════════════════════════
-  .NET MIGRATION CRITIQUE
+  .NET MIGRATION CRITIC
 ═══════════════════════════════════════════════════
   net6.0 → net8.0  |  Grade: B  (74/100)
 
@@ -358,11 +358,11 @@ Write to `migrated-output/{repoName}/.migration/`.
 
 ## STANDALONE INVOCATION
 
-The critique agent can be invoked independently of the pipeline at any time:
+The critic agent can be invoked independently of the pipeline at any time:
 
 ### Via Copilot Prompt
 ```
-Critique the migration for this project
+Critic the migration for this project
 ```
 ```
 Score this migration from .NET 6 to .NET 8
@@ -371,16 +371,16 @@ Score this migration from .NET 6 to .NET 8
 Review the migration quality and tell me what needs fixing
 ```
 
-In standalone mode, the agent reads whatever `migrated-output/{repoName}/.migration/*.json` files are present and critiques based on available data. Missing files reduce confidence and are noted in the report.
+In standalone mode, the agent reads whatever `migrated-output/{repoName}/.migration/*.json` files are present and critics based on available data. Missing files reduce confidence and are noted in the report.
 
 ---
 
-## CRITIQUE REPORT SECTION (for `migration-report.md`)
+## CRITIC REPORT SECTION (for `migration-report.md`)
 
-The Reporting Agent includes the following section in `migration-report.md` using `critique-report.json`:
+The Reporting Agent includes the following section in `migration-report.md` using `critic-report.json`:
 
 ```markdown
-## 10. Migration Quality Critique
+## 10. Migration Quality Critic
 
 **Overall Grade: {grade} ({overallScore}/100)**
 
@@ -417,7 +417,7 @@ The Reporting Agent includes the following section in `migration-report.md` usin
 | API Compatibility Agent | Reads `compatibility-report.json` for severity and autoFixable status |
 | Dependency Mapping Agent | Reads `dependency-report.json` for package health |
 | Build & Compilation Agent | Reads `build-result.json` for errors and warnings |
-| Reporting Agent | Passes `critique-report.json` — Reporting Agent adds Section 10 to `migration-report.md` |
+| Reporting Agent | Passes `critic-report.json` — Reporting Agent adds Section 10 to `migration-report.md` |
 
 ---
 
@@ -427,7 +427,7 @@ The Reporting Agent includes the following section in `migration-report.md` usin
 |---|---|
 | A report missing **in Full Project mode** (pipeline ran but a step's output is absent) | Score affected dimension as 0, note data gap, continue |
 | A report missing **because its step was skipped in Multi-File mode** (`solution-map`/`dependency-report`/`build-result`/`test-result`) | **Exclude** that dimension from the denominator — do NOT score 0. Apply Multi-File (Limited) Scoring above |
-| All JSON files missing | Write critique with all dimensions scored 0 — pipeline was interrupted |
+| All JSON files missing | Write critic with all dimensions scored 0 — pipeline was interrupted |
 | Cannot read modified `.cs` files for code modernization check | Skip sub-checks requiring file access, reduce denominator accordingly |
 | Score computation error | Default to 0 for that dimension, flag as `"scoringError": true` |
 

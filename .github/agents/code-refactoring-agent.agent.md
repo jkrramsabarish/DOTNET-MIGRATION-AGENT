@@ -1,6 +1,6 @@
 # Code Refactoring Agent
 
-> **Called by:** `dotnet-migration-orchestrator-agent.md` (Migration Orchestrator)
+> **Called by:** `dotnet-migration-orchestrator-agent.agent.md` (Migration Orchestrator)
 > **Do not invoke this file directly.** The orchestrator loads it automatically at pipeline step 4.
 
 ---
@@ -49,7 +49,7 @@ If something goes wrong, rollback-agent simply deletes migrated-output/{repoName
 
 Execute every code transformation required to migrate from `sourceVersion` to `targetVersion`. All work is done on the copies of files already sitting in `migrated-output/{repoName}/`. This includes updating project files (TFM, SDK, package versions), rewriting C# source code for API compatibility, migrating hosting models, and inserting TODO markers where manual intervention is needed.
 
-The original source project is never touched. If the migration fails, `rollback-agent.md` simply deletes `migrated-output/{repoName}/` and the developer is back to square one with no damage done.
+The original source project is never touched. If the migration fails, `rollback-agent.agent.md` simply deletes `migrated-output/{repoName}/` and the developer is back to square one with no damage done.
 
 ---
 
@@ -105,9 +105,9 @@ The original source project is never touched. If the migration fails, `rollback-
 ## EXECUTION STEPS
 
 ### Step 1 — Verify Output Directory Is Ready
-- Confirm `migrated-output/{repoName}/` exists and contains a full copy of the source project (placed there by `codebase-analysis-agent.md`).
+- Confirm `migrated-output/{repoName}/` exists and contains a full copy of the source project (placed there by `codebase-analysis-agent.agent.md`).
 - Confirm `migrated-output/{repoName}/.migration/` contains all three upstream JSON files.
-- If `migrated-output/{repoName}/` is missing or empty — halt and tell the orchestrator to re-run `codebase-analysis-agent.md`.
+- If `migrated-output/{repoName}/` is missing or empty — halt and tell the orchestrator to re-run `codebase-analysis-agent.agent.md`.
 - No backup needed — the original source is the backup.
 
 ### Step 2 — Update `.csproj` Files in `migrated-output/{repoName}/`

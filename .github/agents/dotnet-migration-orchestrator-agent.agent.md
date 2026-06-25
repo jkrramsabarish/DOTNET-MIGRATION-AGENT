@@ -3,7 +3,7 @@
 > **GIVE THIS FILE TO GITHUB COPILOT.**
 > Tell Copilot: *"Migrate the project in `./eShopOnWeb` from `sourceVersion` to `targetVersion` using this agent."*
 > Copilot will read this file, resolve all sub-agents listed below, and execute the full migration pipeline automatically.
-> All sub-agent files are co-located in the same folder as this file — reference them by bare filename (e.g. `codebase-analysis-agent.md`), never by a hardcoded folder path, so the pipeline works regardless of where the agents folder lives.
+> All sub-agent files are co-located in the same folder as this file — reference them by bare filename (e.g. `codebase-analysis-agent.agent.md`), never by a hardcoded folder path, so the pipeline works regardless of where the agents folder lives.
 
 ---
 
@@ -71,16 +71,16 @@ All agents must follow this rule without exception.
 Triggered when input is a single `.cs` file.
 
 **Agents that run:**
-- ✅ Step 3 — `api-compatibility-agent.md` (scan the one file)
-- ✅ Step 4 — `code-refactoring-agent.md` (rewrite the one file)
-- ✅ Step 7 — `reporting-agent.md` (generate report)
+- ✅ Step 3 — `api-compatibility-agent.agent.md` (scan the one file)
+- ✅ Step 4 — `code-refactoring-agent.agent.md` (rewrite the one file)
+- ✅ Step 7 — `reporting-agent.agent.md` (generate report)
 
 **Agents that are SKIPPED (with reason):**
-- ❌ Step 1 — `codebase-analysis-agent.md` — no solution/project to scan
-- ❌ Step 2 — `dependency-mapping-agent.md` — no `.csproj` to read packages from
-- ❌ Step 5 — `build-compilation-agent.md` — cannot build a lone `.cs` file
-- ❌ Step 6 — `test-execution-agent.md` — no test project to run
-- ❌ Step 6.5 — `critique-agent.md` — insufficient data for meaningful score
+- ❌ Step 1 — `codebase-analysis-agent.agent.md` — no solution/project to scan
+- ❌ Step 2 — `dependency-mapping-agent.agent.md` — no `.csproj` to read packages from
+- ❌ Step 5 — `build-compilation-agent.agent.md` — cannot build a lone `.cs` file
+- ❌ Step 6 — `test-execution-agent.agent.md` — no test project to run
+- ❌ Step 6.5 — `critic-agent.agent.md` — insufficient data for meaningful score
 
 **Output structure:**
 ```
@@ -103,16 +103,16 @@ migrated-output/
 Triggered when input is a folder of `.cs` files with NO `.csproj` or `.sln`.
 
 **Agents that run:**
-- ✅ Step 3 — `api-compatibility-agent.md` (scan all `.cs` files in folder)
-- ✅ Step 4 — `code-refactoring-agent.md` (rewrite all files)
-- ✅ Step 6.5 — `critique-agent.md` (limited scoring — no build/test data)
-- ✅ Step 7 — `reporting-agent.md`
+- ✅ Step 3 — `api-compatibility-agent.agent.md` (scan all `.cs` files in folder)
+- ✅ Step 4 — `code-refactoring-agent.agent.md` (rewrite all files)
+- ✅ Step 6.5 — `critic-agent.agent.md` (limited scoring — no build/test data)
+- ✅ Step 7 — `reporting-agent.agent.md`
 
 **Agents that are SKIPPED:**
-- ❌ Step 1 — `codebase-analysis-agent.md` — no `.csproj` to analyze
-- ❌ Step 2 — `dependency-mapping-agent.md` — no `.csproj` to read packages from
-- ❌ Step 5 — `build-compilation-agent.md` — no project file to build
-- ❌ Step 6 — `test-execution-agent.md` — no test project
+- ❌ Step 1 — `codebase-analysis-agent.agent.md` — no `.csproj` to analyze
+- ❌ Step 2 — `dependency-mapping-agent.agent.md` — no `.csproj` to read packages from
+- ❌ Step 5 — `build-compilation-agent.agent.md` — no project file to build
+- ❌ Step 6 — `test-execution-agent.agent.md` — no test project
 
 **Output structure:**
 ```
@@ -160,7 +160,7 @@ This is the **central controller agent** for migrating a .NET codebase from any 
 
 ### Option 1 — Inline Prompt (takes precedence over config)
 ```
-Migrate the project in ./eShopOnWeb from .NET 6 to .NET 8 using dotnet-migration-orchestrator-agent.md
+Migrate the project in ./eShopOnWeb from .NET 6 to .NET 8 using dotnet-migration-orchestrator-agent.agent.md
 ```
 If versions are given both here and in `migration.config.json`, the inline prompt wins.
 
@@ -189,7 +189,7 @@ If versions are given both here and in `migration.config.json`, the inline promp
 | Flag | Default | Why |
 |---|---|---|
 | `rollbackOnFailure` | `false` | Preserve output + report on failure; deleting everything leaves the developer nothing to fix. Opt in to destructive rollback. |
-| `retryOnBuildFailure` / `maxBuildFixIterations` | `true` / `6` | Real migrations need several build→fix passes (a single retry is not enough). The loop feeds MSBuild errors back to `code-refactoring-agent.md`. |
+| `retryOnBuildFailure` / `maxBuildFixIterations` | `true` / `6` | Real migrations need several build→fix passes (a single retry is not enough). The loop feeds MSBuild errors back to `code-refactoring-agent.agent.md`. |
 | `enableNullable` | `false` | Enabling nullable reference types across a large legacy codebase mid-migration produces warning storms and interacts badly with `notnull` generic constraints (e.g. MediatR). Make it a deliberate, separate step. |
 | `modernizeHosting` | `false` | Migrating `Startup`/Generic Host → minimal hosting is optional. The Generic Host + `Startup` model still compiles and runs on net8; retaining it is the lower-risk path and avoids touching `WebApplicationFactory<Startup>` test fixtures. Opt in when modernization is the goal. |
 
@@ -216,18 +216,18 @@ Sub-agents are loaded and invoked based on the detected migration mode. Each age
 
 | # | Agent File | Responsibility | Single File | Multi-File | Full Project |
 |---|---|---|---|---|---|
-| 1 | `codebase-analysis-agent.md` | Scan solution structure, classify project types, detect TFM | ❌ Skip | ❌ Skip | ✅ Run |
-| 2 | `dependency-mapping-agent.md` | Build NuGet dependency graph, flag incompatible packages | ❌ Skip | ❌ Skip | ✅ Run |
-| 3 | `api-compatibility-agent.md` | Detect breaking API changes between sourceVersion and targetVersion | ✅ Run | ✅ Run | ✅ Run |
-| 4 | `code-refactoring-agent.md` | Write upgraded copies of all files to `migrated-output/{repoName}/` | ✅ Run | ✅ Run | ✅ Run |
-| 5 | `build-compilation-agent.md` | Run MSBuild against `migrated-output/{repoName}/`, gate pipeline | ❌ Skip | ❌ Skip | ✅ Run |
-| 6 | `test-execution-agent.md` | Execute unit/integration tests, classify pass/fail/skip | ❌ Skip | ❌ Skip | ✅ Run |
-| 6.5 | `critique-agent.md` | Score migration quality across 6 dimensions, assign grade | ❌ Skip | ✅ Run (limited) | ✅ Run |
-| 7 | `reporting-agent.md` | Aggregate results into `migration-report.md` | ✅ Run | ✅ Run | ✅ Run |
+| 1 | `codebase-analysis-agent.agent.md` | Scan solution structure, classify project types, detect TFM | ❌ Skip | ❌ Skip | ✅ Run |
+| 2 | `dependency-mapping-agent.agent.md` | Build NuGet dependency graph, flag incompatible packages | ❌ Skip | ❌ Skip | ✅ Run |
+| 3 | `api-compatibility-agent.agent.md` | Detect breaking API changes between sourceVersion and targetVersion | ✅ Run | ✅ Run | ✅ Run |
+| 4 | `code-refactoring-agent.agent.md` | Write upgraded copies of all files to `migrated-output/{repoName}/` | ✅ Run | ✅ Run | ✅ Run |
+| 5 | `build-compilation-agent.agent.md` | Run MSBuild against `migrated-output/{repoName}/`, gate pipeline | ❌ Skip | ❌ Skip | ✅ Run |
+| 6 | `test-execution-agent.agent.md` | Execute unit/integration tests, classify pass/fail/skip | ❌ Skip | ❌ Skip | ✅ Run |
+| 6.5 | `critic-agent.agent.md` | Score migration quality across 6 dimensions, assign grade | ❌ Skip | ✅ Run (limited) | ✅ Run |
+| 7 | `reporting-agent.agent.md` | Aggregate results into `migration-report.md` | ✅ Run | ✅ Run | ✅ Run |
 
-**On build failure (Full Project mode only):** FIRST run the build→fix loop in `build-compilation-agent.md` (feed compiler errors back to `code-refactoring-agent.md`, up to `maxBuildFixIterations`, default 6). Only if the build is still red after the loop do you act on `rollbackOnFailure`:
-- `rollbackOnFailure: false` (**DEFAULT**) — **preserve** `migrated-output/{repoName}/`, still run `reporting-agent.md`, and report the remaining MSBuild errors + any `// TODO [MIGRATION]` markers. Deleting all output (and the report) on failure destroys the developer's only artifact — do not do it by default.
-- `rollbackOnFailure: true` (explicit opt-in only) — invoke `rollback-agent.md` to delete `migrated-output/{repoName}/`.
+**On build failure (Full Project mode only):** FIRST run the build→fix loop in `build-compilation-agent.agent.md` (feed compiler errors back to `code-refactoring-agent.agent.md`, up to `maxBuildFixIterations`, default 6). Only if the build is still red after the loop do you act on `rollbackOnFailure`:
+- `rollbackOnFailure: false` (**DEFAULT**) — **preserve** `migrated-output/{repoName}/`, still run `reporting-agent.agent.md`, and report the remaining MSBuild errors + any `// TODO [MIGRATION]` markers. Deleting all output (and the report) on failure destroys the developer's only artifact — do not do it by default.
+- `rollbackOnFailure: true` (explicit opt-in only) — invoke `rollback-agent.agent.md` to delete `migrated-output/{repoName}/`.
 **Rollback is never triggered in Single File or Multi-File mode** — there is no build step to fail.
 
 ---
@@ -248,54 +248,54 @@ Sub-agents are loaded and invoked based on the detected migration mode. Each age
    → Copy ALL source files into migrated-output/{repoName}/ unmodified
    │
    ▼
-[1] codebase-analysis-agent.md
+[1] codebase-analysis-agent.agent.md
    → Discovers all .csproj / .sln files
    → Reads current <TargetFramework> values
    → Classifies: web API / class library / worker / console / test
    → Output: migrated-output/{repoName}/.migration/solution-map.json
    │
    ▼
-[2] dependency-mapping-agent.md
+[2] dependency-mapping-agent.agent.md
    → Parses all PackageReference entries from source .csproj files
    → Resolves latest compatible version for targetVersion
    → Output: migrated-output/{repoName}/.migration/dependency-report.json
    │
    ▼
-[3] api-compatibility-agent.md
+[3] api-compatibility-agent.agent.md
    → Scans all .cs files for breaking API changes
    → Output: migrated-output/{repoName}/.migration/compatibility-report.json
    │
    ▼
-[4] code-refactoring-agent.md
+[4] code-refactoring-agent.agent.md
    → Applies all transformations to files in migrated-output/{repoName}/
    → Updates .csproj TFM and package versions
    → Rewrites .cs files for API compatibility
    → Output: migrated-output/{repoName}/.migration/refactoring-summary.json
    │
    ▼
-[5] build-compilation-agent.md
+[5] build-compilation-agent.agent.md
    → Runs: dotnet build migrated-output/{repoName}/ --configuration Release
-   → FAIL → Build→Fix loop (feed errors to code-refactoring-agent.md, ≤ maxBuildFixIterations)
+   → FAIL → Build→Fix loop (feed errors to code-refactoring-agent.agent.md, ≤ maxBuildFixIterations)
             → still red? honor rollbackOnFailure:
-                • false (DEFAULT) → preserve output, continue to [7] reporting-agent.md
-                • true (opt-in)  → rollback-agent.md (deletes migrated-output/{repoName}/) → STOP
+                • false (DEFAULT) → preserve output, continue to [7] reporting-agent.agent.md
+                • true (opt-in)  → rollback-agent.agent.md (deletes migrated-output/{repoName}/) → STOP
    → PASS → continue
    → Output: migrated-output/{repoName}/.migration/build-result.json
    │
    ▼
-[6] test-execution-agent.md
+[6] test-execution-agent.agent.md
    → Runs: dotnet test from migrated-output/{repoName}/
    → Classifies: PASSED / FAILED / SKIPPED / INCOMPATIBLE
    → Output: migrated-output/{repoName}/.migration/test-result.json
    │
    ▼
-[6.5] critique-agent.md
+[6.5] critic-agent.agent.md
    → Scores migration quality across 6 dimensions
    → Assigns grade A–F and shipping readiness verdict
-   → Output: migrated-output/{repoName}/.migration/critique-report.json
+   → Output: migrated-output/{repoName}/.migration/critic-report.json
    │
    ▼
-[7] reporting-agent.md
+[7] reporting-agent.agent.md
    → Merges all JSON outputs
    → Generates migrated-output/{repoName}/migration-report.md
    │
@@ -318,18 +318,18 @@ Sub-agents are loaded and invoked based on the detected migration mode. Each age
    → Copy the single .cs file into migrated-output/{repoName}/
    │
    ▼
-[3] api-compatibility-agent.md
+[3] api-compatibility-agent.agent.md
    → Scans the single file for breaking API changes
    → Output: migrated-output/{repoName}/.migration/compatibility-report.json
    │
    ▼
-[4] code-refactoring-agent.md
+[4] code-refactoring-agent.agent.md
    → Applies all transformations to the file in migrated-output/{repoName}/
    → Inserts TODO markers for non-auto-fixable issues
    → Output: migrated-output/{repoName}/.migration/refactoring-summary.json
    │
    ▼
-[7] reporting-agent.md
+[7] reporting-agent.agent.md
    → Generates migrated-output/{repoName}/migration-report.md
    → Notes which steps were skipped and why
    │
@@ -353,22 +353,22 @@ Sub-agents are loaded and invoked based on the detected migration mode. Each age
    → Copy all .cs files into migrated-output/{repoName}/ preserving subfolder structure
    │
    ▼
-[3] api-compatibility-agent.md
+[3] api-compatibility-agent.agent.md
    → Scans all .cs files in the folder
    → Output: migrated-output/{repoName}/.migration/compatibility-report.json
    │
    ▼
-[4] code-refactoring-agent.md
+[4] code-refactoring-agent.agent.md
    → Applies all transformations to files in migrated-output/{repoName}/
    → Output: migrated-output/{repoName}/.migration/refactoring-summary.json
    │
    ▼
-[6.5] critique-agent.md
+[6.5] critic-agent.agent.md
    → Scores on available dimensions (code modernization + TODO debt only)
-   → Output: migrated-output/{repoName}/.migration/critique-report.json
+   → Output: migrated-output/{repoName}/.migration/critic-report.json
    │
    ▼
-[7] reporting-agent.md
+[7] reporting-agent.agent.md
    → Generates migrated-output/{repoName}/migration-report.md
    → Notes which steps were skipped and why
    │
@@ -405,7 +405,7 @@ your-workspace/
             ├── refactoring-summary.json
             ├── build-result.json
             ├── test-result.json
-            └── critique-report.json
+            └── critic-report.json
 ```
 
 ### Single File Mode
@@ -437,7 +437,7 @@ your-workspace/
         └── .migration/
             ├── compatibility-report.json
             ├── refactoring-summary.json
-            └── critique-report.json
+            └── critic-report.json
 ```
 
 **Rollback scope (Full Project only):** If a migration fails, ONLY `migrated-output/{repoName}/` is deleted. All other outputs are untouched.
@@ -467,7 +467,7 @@ your-workspace/
 | `refactoring-summary.json` | `migrated-output/{repoName}/.migration/` | code-refactoring-agent |
 | `build-result.json` | `migrated-output/{repoName}/.migration/` | build-compilation-agent |
 | `test-result.json` | `migrated-output/{repoName}/.migration/` | test-execution-agent |
-| `critique-report.json` | `migrated-output/{repoName}/.migration/` | critique-agent |
+| `critic-report.json` | `migrated-output/{repoName}/.migration/` | critic-agent |
 | `migration-report.md` | `migrated-output/{repoName}/` | reporting-agent |
 | Upgraded source files | `migrated-output/{repoName}/src/...` | code-refactoring-agent |
 
@@ -494,7 +494,7 @@ your-workspace/
 
 | Failure Scenario | Action |
 |---|---|
-| Build fails after refactoring (Full Project) | Run the build→fix loop (≤ `maxBuildFixIterations`, default 6) feeding errors to `code-refactoring-agent.md`. If still failing: with `rollbackOnFailure:false` (default) **preserve output + run reporting + list remaining errors/TODOs**; with `rollbackOnFailure:true` invoke `rollback-agent.md`. |
+| Build fails after refactoring (Full Project) | Run the build→fix loop (≤ `maxBuildFixIterations`, default 6) feeding errors to `code-refactoring-agent.agent.md`. If still failing: with `rollbackOnFailure:false` (default) **preserve output + run reporting + list remaining errors/TODOs**; with `rollbackOnFailure:true` invoke `rollback-agent.agent.md`. |
 | NuGet package has no compatible version | Flag in `dependency-report.json`, skip upgrade, continue with warning |
 | Breaking API has no known replacement | Insert `// TODO [MIGRATION]` comment in `migrated-output/` copy |
 | Test failures | Do NOT rollback — flag in report, let developer decide |
@@ -520,7 +520,7 @@ Migrate all files in ./MyServices/ from .NET 6 to .NET 8
 
 ### Full Project (cloned or copy-pasted repo)
 ```
-Migrate the project in ./eShopOnWeb from .NET 6 to .NET 8 using dotnet-migration-orchestrator-agent.md
+Migrate the project in ./eShopOnWeb from .NET 6 to .NET 8 using dotnet-migration-orchestrator-agent.agent.md
 ```
 → Runs all steps 1–7. Output: `migrated-output/eShopOnWeb/`
 
@@ -555,10 +555,10 @@ Applied rules: naming conventions, namespace structure, nullable reference types
 These do not change outputs, only how fast/accurately the pipeline reaches them:
 
 1. **Single analysis read-pass.** Steps 1–3 (codebase-analysis, dependency-mapping, api-compatibility) all READ the same source tree. Walk the tree ONCE and emit `solution-map.json`, `dependency-report.json`, and `compatibility-report.json` together, rather than three separate scans.
-2. **Fast-path dependency resolution.** Resolve from the version table in `dependency-mapping-agent.md` first; call the NuGet API only for packages not covered. (Eliminates most network round-trips.)
-3. **Pre-flight symbol sweep, then batch-fix.** Run the one-shot ripgrep in `api-compatibility-agent.md` so `code-refactoring-agent.md` fixes ALL known breaking-change classes in pass 1, batched by `(rule, symbol)`. This collapses the build→fix loop from ~one error-class-per-iteration to typically 1–2 iterations.
+2. **Fast-path dependency resolution.** Resolve from the version table in `dependency-mapping-agent.agent.md` first; call the NuGet API only for packages not covered. (Eliminates most network round-trips.)
+3. **Pre-flight symbol sweep, then batch-fix.** Run the one-shot ripgrep in `api-compatibility-agent.agent.md` so `code-refactoring-agent.agent.md` fixes ALL known breaking-change classes in pass 1, batched by `(rule, symbol)`. This collapses the build→fix loop from ~one error-class-per-iteration to typically 1–2 iterations.
 4. **Solution hygiene + restore-once.** Strip non-buildable projects (`.dcproj`, etc.) from the output `.sln` before building; `dotnet restore` once, iterate incrementally, confirm once with `--no-incremental`.
-5. **Test-host checklist up front.** For any project with `WebApplicationFactory`, apply the TH001–TH004 fixes in `test-execution-agent.md` proactively — the 2.x test fixture (not the app) is the usual source of post-migration 500s. Diagnose the real server exception (run the app directly) instead of guessing from the 500.
+5. **Test-host checklist up front.** For any project with `WebApplicationFactory`, apply the TH001–TH004 fixes in `test-execution-agent.agent.md` proactively — the 2.x test fixture (not the app) is the usual source of post-migration 500s. Diagnose the real server exception (run the app directly) instead of guessing from the 500.
 6. **Dead-reference pruning.** Drop unused/abandoned packages (grep for usage) instead of upgrading them — removes whole compatibility risks.
 
 ---

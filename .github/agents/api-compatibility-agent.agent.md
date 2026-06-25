@@ -1,6 +1,6 @@
 # API Compatibility Agent
 
-> **Called by:** `dotnet-migration-orchestrator-agent.md` (Migration Orchestrator)
+> **Called by:** `dotnet-migration-orchestrator-agent.agent.md` (Migration Orchestrator)
 > **Do not invoke this file directly.** The orchestrator loads it automatically at pipeline step 3.
 
 ---
@@ -44,7 +44,7 @@ Never modify any file in migrated-output/{repoName}/ — that is code-refactorin
 
 ## RESPONSIBILITY
 
-Scan every C# source file in the original project for usage of APIs, patterns, and runtime behaviors that changed, were removed, or require explicit opt-in between `sourceVersion` and `targetVersion`. Produce a complete compatibility report with file locations, line numbers, severity levels, and recommended replacements. The report's file paths include both source and `migrated-output/{repoName}/` paths so `code-refactoring-agent.md` knows exactly which output files to edit.
+Scan every C# source file in the original project for usage of APIs, patterns, and runtime behaviors that changed, were removed, or require explicit opt-in between `sourceVersion` and `targetVersion`. Produce a complete compatibility report with file locations, line numbers, severity levels, and recommended replacements. The report's file paths include both source and `migrated-output/{repoName}/` paths so `code-refactoring-agent.agent.md` knows exactly which output files to edit.
 
 ---
 
@@ -104,7 +104,7 @@ Scan every C# source file in the original project for usage of APIs, patterns, a
 }
 ```
 
-Note: every issue has both `sourceFile` (where it was found) and `outputFile` (where `code-refactoring-agent.md` must apply the fix in `migrated-output/{repoName}/`).
+Note: every issue has both `sourceFile` (where it was found) and `outputFile` (where `code-refactoring-agent.agent.md` must apply the fix in `migrated-output/{repoName}/`).
 
 ---
 
@@ -239,13 +239,13 @@ Cross-reference `dependency-report.json`: when a package's resolved major differ
 | `dotnet-xunit` (DotNetCliToolReference) | Obsolete, unsupported on net8 SDK | Remove. |
 | `System.Security.Claims`, `Microsoft.AspNetCore.Mvc` (as standalone pkg), `Microsoft.AspNetCore.Identity` | Inbox / in shared framework | Remove the PackageReference; use `<FrameworkReference>` where needed. |
 
-> **Note for `code-refactoring-agent.md`:** items previously bundled in the 2.x `Microsoft.AspNetCore.App` metapackage (e.g. `AddDefaultUI` → Identity.UI, `UseMigrationsEndPoint` → Diagnostics.EntityFrameworkCore, `UseInMemoryDatabase` → EntityFrameworkCore.InMemory) must be re-added as **explicit** PackageReferences after the metapackage is removed.
+> **Note for `code-refactoring-agent.agent.md`:** items previously bundled in the 2.x `Microsoft.AspNetCore.App` metapackage (e.g. `AddDefaultUI` → Identity.UI, `UseMigrationsEndPoint` → Diagnostics.EntityFrameworkCore, `UseInMemoryDatabase` → EntityFrameworkCore.InMemory) must be re-added as **explicit** PackageReferences after the metapackage is removed.
 
 ### Step 4 — Detect `Startup.cs` Pattern (Pre-.NET 6)
 If `sourceVersion` is `net5.0` or lower and a `Startup.cs` file is present:
 - Flag as `category: "HostingModelMigration"`.
 - Mark all `Configure` and `ConfigureServices` methods.
-- `code-refactoring-agent.md` will offer to consolidate into minimal `Program.cs` in `migrated-output/{repoName}/`.
+- `code-refactoring-agent.agent.md` will offer to consolidate into minimal `Program.cs` in `migrated-output/{repoName}/`.
 
 ### Step 5 — Detect Nullable Reference Type Gaps
 If `targetVersion` is `net6.0` or higher and `<Nullable>` is not `enable` in any project:
@@ -315,14 +315,14 @@ If `targetVersion` is `net6.0` or higher and `<Nullable>` is not `enable` in any
 | Failure | Action |
 |---|---|
 | File cannot be parsed by Roslyn | Fall back to regex scan; flag file as "partially analyzed" |
-| Rule match has no known replacement | Set `autoFixable: false`, emit `// TODO [MIGRATION]: {description}` instruction for `code-refactoring-agent.md` to insert in `migrated-output/{repoName}/` copy |
+| Rule match has no known replacement | Set `autoFixable: false`, emit `// TODO [MIGRATION]: {description}` instruction for `code-refactoring-agent.agent.md` to insert in `migrated-output/{repoName}/` copy |
 | More than 50 breaking issues found | Log all, continue — do not halt (refactoring agent handles them in `migrated-output/{repoName}/`) |
 
 ---
 
 ## PRE-FLIGHT SYMBOL SWEEP (v3.1 — find ALL breakers in one pass before deep analysis)
 
-Run a single repo-wide ripgrep for the known-breaking symbols up front and emit every hit into `compatibility-report.json` with `autoFixable: true` and its rule ID. This is the single biggest accuracy/speed lever: it lets `code-refactoring-agent.md` fix **all** known classes in pass 1, instead of the build→fix loop discovering one error class per iteration.
+Run a single repo-wide ripgrep for the known-breaking symbols up front and emit every hit into `compatibility-report.json` with `autoFixable: true` and its rule ID. This is the single biggest accuracy/speed lever: it lets `code-refactoring-agent.agent.md` fix **all** known classes in pass 1, instead of the build→fix loop discovering one error class per iteration.
 
 Generic pattern set for any `netcoreapp2.x/3.x → net5+/net8` migration (extend per detected `dependency-report.json` package hops):
 
@@ -332,11 +332,11 @@ rg -n "ForSqlServer|IHostingEnvironment|app\.UseMvc|AddMvc\(|SetCompatibilityVer
 
 Triage each hit:
 - `.HasName(` — only on `HasIndex(...)` is it a breaker (→ `HasDatabaseName`); on keys/sequences it is NOT. Inspect 1 line of context before flagging.
-- `WebApplicationFactory<` / `UseInternalServiceProvider` / `AddEntityFrameworkInMemoryDatabase` — these are TEST-HOST breakers; cross-reference the test-host checklist in `test-execution-agent.md`.
+- `WebApplicationFactory<` / `UseInternalServiceProvider` / `AddEntityFrameworkInMemoryDatabase` — these are TEST-HOST breakers; cross-reference the test-host checklist in `test-execution-agent.agent.md`.
 
 ## TEST-HOST BREAKING CHANGES (v3.1 — compile-clean but 500 at runtime)
 
-Add these to the scope whenever a test project references `Microsoft.AspNetCore.Mvc.Testing` / `WebApplicationFactory`. They typically COMPILE on net8 but fail at request time — pre-flag them so they are fixed proactively (full guidance + fixes live in `test-execution-agent.md`):
+Add these to the scope whenever a test project references `Microsoft.AspNetCore.Mvc.Testing` / `WebApplicationFactory`. They typically COMPILE on net8 but fail at request time — pre-flag them so they are fixed proactively (full guidance + fixes live in `test-execution-agent.agent.md`):
 
 | Rule ID | Pattern | Severity | Replacement |
 |---|---|---|---|

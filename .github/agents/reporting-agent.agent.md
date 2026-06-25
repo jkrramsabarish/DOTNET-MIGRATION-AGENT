@@ -1,6 +1,6 @@
 # Reporting Agent
 
-> **Called by:** `dotnet-migration-orchestrator-agent.md` (Migration Orchestrator)
+> **Called by:** `dotnet-migration-orchestrator-agent.agent.md` (Migration Orchestrator)
 > **Do not invoke this file directly.** The orchestrator loads it automatically at pipeline step 7 — always the final step.
 
 ---
@@ -45,7 +45,7 @@ Produce a complete, executive-readable migration report that covers every dimens
 | `migrated-output/{repoName}/.migration/refactoring-summary.json` | Step 4 agent | ✅ All modes |
 | `migrated-output/{repoName}/.migration/build-result.json` | Step 5 agent | ✅ Full Project only (absent in Single/Multi-File — build skipped) |
 | `migrated-output/{repoName}/.migration/test-result.json` | Step 6 agent | Optional (absent if build failed, or in Single/Multi-File) |
-| `migrated-output/{repoName}/.migration/critique-report.json` | Step 6.5 agent | Optional (absent in Single-File) |
+| `migrated-output/{repoName}/.migration/critic-report.json` | Step 6.5 agent | Optional (absent in Single-File) |
 
 ---
 

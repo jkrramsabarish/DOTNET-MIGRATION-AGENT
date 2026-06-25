@@ -1,6 +1,6 @@
 # Test Execution & Regression Agent
 
-> **Called by:** `dotnet-migration-orchestrator-agent.md` (Migration Orchestrator)
+> **Called by:** `dotnet-migration-orchestrator-agent.agent.md` (Migration Orchestrator)
 > **Do not invoke this file directly.** The orchestrator loads it automatically at pipeline step 6.
 > **Pre-condition:** Only invoked if `migrated-output/{repoName}/.migration/build-result.json` contains `"outcome": "Success"`.
 
@@ -156,7 +156,7 @@ For every failed test, determine the failure category:
 #### Category: `MigrationCaused`
 A failure is migration-caused if:
 - `errorMessage` contains a symbol from `compatibility-report.json` issues list.
-- `stackTrace` references a file in `migrated-output/{repoName}/` that was modified by `code-refactoring-agent.md`.
+- `stackTrace` references a file in `migrated-output/{repoName}/` that was modified by `code-refactoring-agent.agent.md`.
 - `errorMessage` matches known migration-induced patterns:
 
 | Error Pattern | Likely Cause |
@@ -221,7 +221,7 @@ Print to developer:
      Pre-existing:     2  (unrelated to migration)
    Skipped:          2  ⏭️
    Original source:  untouched ✅
-   Proceeding to Critique & Report Generation...
+   Proceeding to Critic & Report Generation...
 ```
 
 ---
@@ -272,7 +272,7 @@ Print to developer:
 | Build & Compilation Agent | Pre-condition gate — only runs after successful build of `migrated-output/{repoName}/` |
 | Code Refactoring Agent | Reads modified file list (`outputFile` paths) to classify failures |
 | API Compatibility Agent | Reads `compatibility-report.json` to link failures to rules |
-| Critique Agent | Passes `test-result.json` for quality scoring |
+| Critic Agent | Passes `test-result.json` for quality scoring |
 | Reporting Agent | Passes `test-result.json` for final report |
 | Rollback Agent | NOT invoked by this agent — test failures do not trigger rollback |
 
@@ -286,13 +286,13 @@ Print to developer:
 | Test runner crashes | Capture crash output, mark project as `"outcome": "RunnerError"`, continue with other projects |
 | TRX file not generated | Fall back to console output parsing; flag as "reduced accuracy" |
 | All tests fail | Report `AllFailed`, do NOT rollback — developer must review `migrated-output/{repoName}/` |
-| No test projects found | Log `"outcome": "NoTests"`, continue to critique and report generation |
+| No test projects found | Log `"outcome": "NoTests"`, continue to critic and report generation |
 
 ---
 
 ## TEST-HOST MIGRATION CHECKLIST — .NET Core 2.x/3.x → 5+/8 (v3.1)
 
-`WebApplicationFactory` / `TestServer` fixtures written for 2.x routinely **compile but 500 at request time** on net8. Apply these proactively (hand to `code-refactoring-agent.md`; they are flagged TH001–TH004 by the API agent). This checklist is the highest-value addition: the 2.2→8 functional-test failures almost always come from the FIXTURE, not the application.
+`WebApplicationFactory` / `TestServer` fixtures written for 2.x routinely **compile but 500 at request time** on net8. Apply these proactively (hand to `code-refactoring-agent.agent.md`; they are flagged TH001–TH004 by the API agent). This checklist is the highest-value addition: the 2.2→8 functional-test failures almost always come from the FIXTURE, not the application.
 
 **Diagnose the real error first — never guess from the 500.** `WebApplicationFactory` swallows the server exception into a generic 500. To see it: (a) run the migrated app directly (`dotnet <app>.dll` with `ASPNETCORE_ENVIRONMENT=Development` + a known `ASPNETCORE_URLS`) and `curl` the failing route — the dev exception page returns the real stack; or (b) add a throwaway test that reads the response body. If the app returns 200 standalone but the test 500s, the defect is in the FIXTURE.
 

@@ -1,6 +1,6 @@
 # Dependency Mapping Agent
 
-> **Called by:** `dotnet-migration-orchestrator-agent.md` (Migration Orchestrator)
+> **Called by:** `dotnet-migration-orchestrator-agent.agent.md` (Migration Orchestrator)
 > **Do not invoke this file directly.** The orchestrator loads it automatically at pipeline step 2.
 
 ---
@@ -12,7 +12,7 @@
 - Query NuGet API for every package found — do not rely on cached or training-data package versions.
 - Resolve compatible versions against `targetVersion` TFM automatically.
 - Write `dependency-report.json` to `migrated-output/{repoName}/.migration/` on completion.
-- Never modify any `.csproj` file — resolution only, no edits. Edits happen in `code-refactoring-agent.md`.
+- Never modify any `.csproj` file — resolution only, no edits. Edits happen in `code-refactoring-agent.agent.md`.
 - If NuGet API is unreachable, fall back to the offline compatibility matrix embedded in the Skills section below.
 
 ---
@@ -110,7 +110,7 @@ Build a complete NuGet dependency graph for the entire solution. For every `<Pac
 }
 ```
 
-Note: `outputProjectPaths` tells `code-refactoring-agent.md` exactly which files in `migrated-output/{repoName}/` to edit.
+Note: `outputProjectPaths` tells `code-refactoring-agent.agent.md` exactly which files in `migrated-output/{repoName}/` to edit.
 
 ---
 
@@ -148,7 +148,7 @@ Some packages that were NuGet dependencies in older versions are now **built int
 | `System.Diagnostics.DiagnosticSource` | .NET 6+ |
 | `System.Runtime.CompilerServices.Unsafe` | .NET 6+ |
 
-Flag these as `status: "NowInbox"` — `code-refactoring-agent.md` will remove the `<PackageReference>` from files in `migrated-output/{repoName}/`.
+Flag these as `status: "NowInbox"` — `code-refactoring-agent.agent.md` will remove the `<PackageReference>` from files in `migrated-output/{repoName}/`.
 
 ### Step 4 — Resolve Compatible Versions via NuGet API
 
@@ -166,7 +166,7 @@ GET https://api.nuget.org/v3-flatcontainer/{package-id-lowercase}/index.json
 - Always confirm the exact version is listed in the flat-container `index.json` before writing it to `dependency-report.json`. Pinning a too-low version can trigger `NU1605` downgrade errors via transitive dependencies; pinning the highest in-band patch avoids both NU1603 and NU1605.
 - Flag any package whose `index.json` reports a known advisory (NuGet `NU1903`) — e.g. `AutoMapper` 12.0.1 — as a `securityAdvisory` note with a patched-version recommendation.
 
-**Detect `FrameworkReference` needs (class libraries):** if a non-web project (`Microsoft.NET.Sdk`) references ASP.NET Core types (e.g. `IWebHostEnvironment`, `IdentityDbContext`, `AddDefaultIdentity`, MVC types) — typically because a now-removed package used to pull them transitively — record `requiresFrameworkReference: "Microsoft.AspNetCore.App"` so `code-refactoring-agent.md` adds `<FrameworkReference>` instead of hunting for a package. Note that `IdentityDbContext` / `AddEntityFrameworkStores` still require the **package** `Microsoft.AspNetCore.Identity.EntityFrameworkCore` (not in the shared framework), and `AddDefaultUI`/`AddDefaultIdentity` require the **package** `Microsoft.AspNetCore.Identity.UI`.
+**Detect `FrameworkReference` needs (class libraries):** if a non-web project (`Microsoft.NET.Sdk`) references ASP.NET Core types (e.g. `IWebHostEnvironment`, `IdentityDbContext`, `AddDefaultIdentity`, MVC types) — typically because a now-removed package used to pull them transitively — record `requiresFrameworkReference: "Microsoft.AspNetCore.App"` so `code-refactoring-agent.agent.md` adds `<FrameworkReference>` instead of hunting for a package. Note that `IdentityDbContext` / `AddEntityFrameworkStores` still require the **package** `Microsoft.AspNetCore.Identity.EntityFrameworkCore` (not in the shared framework), and `AddDefaultUI`/`AddDefaultIdentity` require the **package** `Microsoft.AspNetCore.Identity.UI`.
 
 ### Step 5 — Apply Known Replacement Mappings
 Some deprecated packages have standard modern replacements:
@@ -272,7 +272,7 @@ Used when NuGet API is unreachable. Known-good version mappings:
 | Failure | Action |
 |---|---|
 | NuGet API unreachable | Fall back to offline matrix; flag in report as "Resolved offline — verify before build" |
-| Package has no compatible version | Set `status: "NoCompatibleVersion"`, continue; `code-refactoring-agent.md` will insert TODO comment in `migrated-output/{repoName}/` copy |
+| Package has no compatible version | Set `status: "NoCompatibleVersion"`, continue; `code-refactoring-agent.agent.md` will insert TODO comment in `migrated-output/{repoName}/` copy |
 | Transitive conflict with no resolution | Flag both versions, recommend lowest common version, continue |
 | Malformed `.nuspec` | Skip transitive analysis for that package, log warning |
 

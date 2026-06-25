@@ -1,6 +1,6 @@
 # Codebase Analysis Agent
 
-> **Called by:** `dotnet-migration-orchestrator-agent.md` (Migration Orchestrator)
+> **Called by:** `dotnet-migration-orchestrator-agent.agent.md` (Migration Orchestrator)
 > **Do not invoke this file directly.** The orchestrator loads it automatically at pipeline step 1.
 
 ---
@@ -185,7 +185,7 @@ For each project file in the **source**, extract:
 - Map all `<ProjectReference>` links between projects.
 - Detect circular references — flag as errors.
 - Order projects by dependency depth (leaf projects first, then consumers).
-- This order determines the sequence in which `code-refactoring-agent.md` processes files in `migrated-output/`.
+- This order determines the sequence in which `code-refactoring-agent.agent.md` processes files in `migrated-output/`.
 
 ### Step 8 — Write `solution-map.json`
 - Write to `migrated-output/{repoName}/.migration/`.
@@ -264,7 +264,7 @@ For each project file in the **source**, extract:
 
 - **Multi-targeted projects** (`<TargetFrameworks>net6.0;net8.0</TargetFrameworks>`): Record both TFMs, flag as `MultiTargeted`, do not auto-migrate — include in warnings.
 - **`Directory.Build.props`**: Read from source and apply inherited properties before reading individual `.csproj` values. Copy to `migrated-output/` as-is for refactoring agent to update.
-- **SDK-style vs non-SDK `.csproj`**: Detect non-SDK format (contains `<Import Project="$(MSBuildToolsPath)\..."`), classify as `LegacyFormat` — flag for `code-refactoring-agent.md` to convert in `migrated-output/`.
+- **SDK-style vs non-SDK `.csproj`**: Detect non-SDK format (contains `<Import Project="$(MSBuildToolsPath)\..."`), classify as `LegacyFormat` — flag for `code-refactoring-agent.agent.md` to convert in `migrated-output/`.
 - **Solution filters (`.slnf`)**: Treat as a subset solution — only scan included projects.
 
 ---

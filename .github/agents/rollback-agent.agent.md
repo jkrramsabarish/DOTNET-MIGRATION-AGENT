@@ -1,6 +1,6 @@
 # Rollback Agent
 
-> **Called by:** `dotnet-migration-orchestrator-agent.md` (Migration Orchestrator) and `build-compilation-agent.md`
+> **Called by:** `dotnet-migration-orchestrator-agent.agent.md` (Migration Orchestrator) and `build-compilation-agent.agent.md`
 > **Do not invoke this file directly during normal pipeline flow.**
 > This agent runs **only when `rollbackOnFailure: true`** is explicitly set and the build is still red after the build→fix loop. On the default (`rollbackOnFailure: false`) the output is preserved and this agent is never called. It can also be invoked manually by the developer.
 
@@ -108,7 +108,7 @@ rm -rf migrated-output/{repoName}/
 
 ### Step 6 — Halt Pipeline
 - Signal the orchestrator to stop all further agent execution for this repo.
-- Do not invoke any subsequent agents (test, critique, reporting).
+- Do not invoke any subsequent agents (test, critic, reporting).
 
 ---
 
@@ -146,7 +146,7 @@ rm -rf migrated-output/{repoName}/
 |---|---|
 | Build & Compilation Agent | Primary invoker — triggered automatically on build failure |
 | Migration Orchestrator | Receives halt signal after rollback completes |
-| Reporting Agent | NOT invoked after rollback — but rollback only runs on the explicit `rollbackOnFailure: true` path. On the **default** `rollbackOnFailure: false` path this agent is never called: the output is preserved and `reporting-agent.md` runs to report the remaining errors/TODOs |
+| Reporting Agent | NOT invoked after rollback — but rollback only runs on the explicit `rollbackOnFailure: true` path. On the **default** `rollbackOnFailure: false` path this agent is never called: the output is preserved and `reporting-agent.agent.md` runs to report the remaining errors/TODOs |
 
 ---
 

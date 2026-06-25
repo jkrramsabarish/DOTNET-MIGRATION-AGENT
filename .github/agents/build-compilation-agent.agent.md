@@ -1,6 +1,6 @@
 # Build & Compilation Agent
 
-> **Called by:** `dotnet-migration-orchestrator-agent.md` (Migration Orchestrator)
+> **Called by:** `dotnet-migration-orchestrator-agent.agent.md` (Migration Orchestrator)
 > **Do not invoke this file directly.** The orchestrator loads it automatically at pipeline step 5.
 
 ---
@@ -11,9 +11,9 @@
 - Use `--configuration Release` and `--no-incremental` flags for a clean build.
 - Capture the full MSBuild output — do not truncate error logs.
 - Classify every error and warning by category before writing output.
-- If build FAILS: do NOT roll back immediately. First run the **Build → Fix Loop (Step 8)** — hand classified errors to `code-refactoring-agent.md` and rebuild, up to `maxBuildFixIterations` (default 6). Only if it is still red after the loop do you honor `rollbackOnFailure`: default `false` → **preserve** `migrated-output/{repoName}/` and continue to `reporting-agent.md`; `true` (explicit opt-in) → invoke `rollback-agent.md` and halt.
+- If build FAILS: do NOT roll back immediately. First run the **Build → Fix Loop (Step 8)** — hand classified errors to `code-refactoring-agent.agent.md` and rebuild, up to `maxBuildFixIterations` (default 6). Only if it is still red after the loop do you honor `rollbackOnFailure`: default `false` → **preserve** `migrated-output/{repoName}/` and continue to `reporting-agent.agent.md`; `true` (explicit opt-in) → invoke `rollback-agent.agent.md` and halt.
 - If build PASSES: write `build-result.json` to `migrated-output/{repoName}/.migration/` and signal the orchestrator to proceed.
-- Never attempt to fix build errors directly — errors are fed back to `code-refactoring-agent.md` for a targeted retry if configured.
+- Never attempt to fix build errors directly — errors are fed back to `code-refactoring-agent.agent.md` for a targeted retry if configured.
 
 ---
 
@@ -188,11 +188,11 @@ All file paths in output will reference `migrated-output/{repoName}/` — this i
   ```
 
 **If `exitCode != 0` (Build Failed):**
-- Do **not** roll back yet. Enter the **Build → Fix Loop (Step 8)** — classify the errors and hand them to `code-refactoring-agent.md`, then rebuild.
+- Do **not** roll back yet. Enter the **Build → Fix Loop (Step 8)** — classify the errors and hand them to `code-refactoring-agent.agent.md`, then rebuild.
 - Only if the build is still red after `maxBuildFixIterations`:
   - Write `build-result.json` with `"outcome": "Failed"`, the full error list, and `buildIterationsToGreen`.
-  - `rollbackOnFailure: false` (**default**) → **preserve** `migrated-output/{repoName}/`, continue to `reporting-agent.md` so the developer gets a report of the remaining errors + TODO markers. Do not delete the output.
-  - `rollbackOnFailure: true` → invoke `rollback-agent.md`, then halt.
+  - `rollbackOnFailure: false` (**default**) → **preserve** `migrated-output/{repoName}/`, continue to `reporting-agent.agent.md` so the developer gets a report of the remaining errors + TODO markers. Do not delete the output.
+  - `rollbackOnFailure: true` → invoke `rollback-agent.agent.md`, then halt.
 
 ### Step 8 — Build → Fix Loop (default behavior)
 Real migrations rarely go green on the first build — a single retry is not enough. Run an **iterative loop** (default on; `retryOnBuildFailure: true`):
@@ -202,8 +202,8 @@ restore once
 for iteration in 1..maxBuildFixIterations (default 6):
     build (incremental — NOT --no-incremental during the loop)
     if exitCode == 0: break  → run one final clean `--no-incremental` build to confirm, then succeed
-    parse + classify errors → hand the structured error list to code-refactoring-agent.md
-    code-refactoring-agent.md applies targeted fixes in migrated-output/{repoName}/ for, e.g.:
+    parse + classify errors → hand the structured error list to code-refactoring-agent.agent.md
+    code-refactoring-agent.agent.md applies targeted fixes in migrated-output/{repoName}/ for, e.g.:
       - MissingType / MissingNamespace  → add using, FrameworkReference, or the explicit package
         the 2.x metapackage used to bundle (Identity.UI, Diagnostics.EntityFrameworkCore, EFCore.InMemory…)
       - renamed APIs (ForSqlServer* → UseHiLo, UseSwaggerUi3 → UseSwaggerUi, Info → OpenApiInfo…)
@@ -275,8 +275,8 @@ Always tell the developer how many iterations were used (`buildIterationsToGreen
 |---|---|
 | SDK not installed | Halt, report SDK version and download link, do NOT rollback (source unchanged) |
 | NuGet restore fails for `migrated-output/{repoName}/` | Halt, report missing packages, do NOT rollback (source unchanged) |
-| Build fails on first attempt | Do NOT rollback. Enter the Build → Fix Loop (Step 8): classify errors, hand them to `code-refactoring-agent.md`, rebuild |
-| Build still failing after `maxBuildFixIterations` | Write `build-result.json` (`"outcome": "Failed"` + `buildIterationsToGreen`). Then honor `rollbackOnFailure`: `false` (**default**) → preserve output + continue to `reporting-agent.md` with remaining errors/TODOs; `true` → invoke `rollback-agent.md`, then halt |
+| Build fails on first attempt | Do NOT rollback. Enter the Build → Fix Loop (Step 8): classify errors, hand them to `code-refactoring-agent.agent.md`, rebuild |
+| Build still failing after `maxBuildFixIterations` | Write `build-result.json` (`"outcome": "Failed"` + `buildIterationsToGreen`). Then honor `rollbackOnFailure`: `false` (**default**) → preserve output + continue to `reporting-agent.agent.md` with remaining errors/TODOs; `true` → invoke `rollback-agent.agent.md`, then halt |
 | `dotnet` CLI not found in PATH | Halt immediately, report: "dotnet CLI not found. Install .NET SDK." |
 
 ---
@@ -289,7 +289,7 @@ Before building, remove from the OUTPUT `.sln` copy (never the source) any proje
 
 ## SPEED RULES (reinforced v3.1)
 - `dotnet restore` ONCE. In the fix loop, build WITHOUT `--no-incremental` (reuse the cache). Use `--no-incremental` only for the single final confirmation build. Re-restore only when a `.csproj` package set changes.
-- Parse errors by **code**, dedup by `(file,line,code)`, group identical errors, and hand `code-refactoring-agent.md` the whole grouped set so it batch-fixes by class (one fix clears many sites). Expect 1–2 iterations when the pre-flight sweep ran, not 6.
+- Parse errors by **code**, dedup by `(file,line,code)`, group identical errors, and hand `code-refactoring-agent.agent.md` the whole grouped set so it batch-fixes by class (one fix clears many sites). Expect 1–2 iterations when the pre-flight sweep ran, not 6.
 - Most first-iteration errors after a 2.x decomposition are `CS0246`/`CS1061` "missing type/member": map them to the explicit package the metapackage used to bundle (InMemory, Identity.UI, Diagnostics.EntityFrameworkCore) or a `<FrameworkReference>` for ASP.NET types in non-web projects.
 
 ---
