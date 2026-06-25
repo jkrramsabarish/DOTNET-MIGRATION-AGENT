@@ -22,7 +22,7 @@ This pipeline performs **Next.js version upgrades** (e.g. 12→13, 13→14, 14�
 - **Auto-detect the package manager** from the lockfile (`pnpm-lock.yaml` → pnpm, `yarn.lock` → yarn, `package-lock.json` → npm). Use it consistently for every install/build/test command.
 - Load ONLY the sub-agents required for the detected mode (see Agent Registry).
 - Never hardcode a Next.js version — always read from config or prompt.
-- Never modify any original source file — ALL output goes to `upgraded-output/{repoName}/`.
+- Never modify any original source file — ALL output goes to `./upgraded-output/{repoName}/`, created in the **current working directory** (workspace root), as a sibling of the source project — NEVER inside the Next.js project being upgraded.
 - **Capture a pre-upgrade baseline BEFORE any change** (see BASELINE — NON-NEGOTIABLE). The validator gates on *no new failures vs. this baseline*, never absolute green.
 - Never ask the developer "should I proceed?" mid-pipeline — proceed automatically and report at the end.
 - If `upgrade.config.json` is absent, prompt the user ONCE for `sourceVersion` and `targetVersion`, create the file, and continue.
@@ -36,17 +36,30 @@ This pipeline performs **Next.js version upgrades** (e.g. 12→13, 13→14, 14�
 ORIGINAL SOURCE FILES ARE NEVER MODIFIED OR DELETED.
 
 Every file produced or modified by this pipeline is written to:
-  upgraded-output/{repoName}/
+  ./upgraded-output/{repoName}/
+
+LOCATION IS CRITICAL — READ CAREFULLY:
+  `upgraded-output/` is created in the CURRENT WORKING DIRECTORY where the
+  orchestrator is invoked (the workspace root), as a SIBLING of the source
+  project. It is NEVER created inside the Next.js project being upgraded.
+
+  CORRECT:   <cwd>/upgraded-output/my-app/        ← sibling of the source
+  WRONG:     ./my-app/upgraded-output/my-app/     ← NEVER nest it inside the source
+
+  Resolve the output path against the current working directory / workspace
+  root, NOT against `sourceProjectPath`. Even when the source project is given
+  as a nested path (e.g. ./sample-projects/my-app), the output still goes to
+  <cwd>/upgraded-output/my-app/ — do not place it under sample-projects/my-app/.
 
 Where {repoName} is derived from the input (see UPGRADE MODE DETECTION).
 Each upgrade is fully isolated inside its own subfolder.
 The original source tree IS the backup — it is never touched.
 
-Example (full project):
-  Source:  my-app/pages/index.tsx                       ← NEVER TOUCHED
-  Output:  upgraded-output/my-app/pages/index.tsx       ← upgraded copy written here
+Example (full project, source at ./sample-projects/my-app):
+  Source:  sample-projects/my-app/pages/index.tsx       ← NEVER TOUCHED
+  Output:  ./upgraded-output/my-app/pages/index.tsx     ← upgraded copy here (at cwd)
 
-If an upgrade fails, ONLY upgraded-output/{repoName}/ is affected.
+If an upgrade fails, ONLY ./upgraded-output/{repoName}/ is affected.
 All other outputs remain untouched.
 
 All agents must follow this rule without exception.
@@ -129,7 +142,7 @@ Upgrade the project in ./my-app from Next.js 13 to 15 using nextjs-upgrade-orche
   "sourceVersion": "13.5.0",
   "targetVersion": "15.0.0",
   "sourceProjectPath": "./my-app",
-  "outputPath": "./upgraded-output",
+  "outputPath": "./upgraded-output",   // resolved against the CWD/workspace root, NOT against sourceProjectPath
   "packageManager": "auto",
   "runTests": true,
   "rollbackOnFailure": false,
@@ -180,7 +193,7 @@ Each agent file is co-located with this orchestrator and referenced by bare file
    → {repoName} = root folder name; detect package manager from lockfile
    │
    ▼
-[0 INIT + BASELINE] Create upgraded-output/{repoName}/, copy ALL source unmodified.
+[0 INIT + BASELINE] Create ./upgraded-output/{repoName}/ in the CWD (NOT inside the source project), copy ALL source unmodified.
    → install deps · run tests · run tsc/lint · (optional) next build
    → Output: .upgrade/baseline.json   (preExistingFailures, preExistingDiagnostics, testsExist)
    │

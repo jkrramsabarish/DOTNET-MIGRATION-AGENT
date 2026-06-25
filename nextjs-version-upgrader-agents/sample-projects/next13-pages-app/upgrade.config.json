@@ -1,0 +1,13 @@
+{
+  "sourceVersion": "13.5.6",
+  "targetVersion": "15.0.0",
+  "sourceProjectPath": "./",
+  "outputPath": "./upgraded-output",
+  "packageManager": "auto",
+  "runTests": true,
+  "rollbackOnFailure": false,
+  "maxTransformRetries": 2,
+  "criticStrictness": "fast",
+  "migrateAppRouter": false,
+  "generateReport": true
+}
