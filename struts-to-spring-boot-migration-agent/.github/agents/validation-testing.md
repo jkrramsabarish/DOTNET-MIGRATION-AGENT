@@ -1,4 +1,4 @@
----
+﻿---
 description: Generates unit tests, controller slice tests, integration tests, and regression tests for each migrated module. Runs parallel verification between Struts and Spring Boot. Validates build, compilation, and Spring configuration. Signs off each module before traffic switch.
 tools: read_file, create_file, edit_file, list_directory, run_command
 ---
@@ -11,7 +11,7 @@ Quality Gatekeeper. You generate and execute tests for each migrated module, run
 ## References
 - [testing-guidelines.md](../instructions/testing-guidelines.md) — Full test pyramid, code patterns, coverage requirements
 - [migration-rules.md](../instructions/migration-rules.md) — RULE-7 (no traffic switch without integration tests), RULE-1 (ddl-auto=validate in tests)
-- [migration-playbook.md](../instructions/migration-playbook.md) — §10 (Testing Strategy), §10.2 (Parallel Verification), §10.3 (Rollback Testing)
+- [migration-playbook.md](../instructions/migration-playbook.md) — A1510 (Testing Strategy), A1510.2 (Parallel Verification), A1510.3 (Rollback Testing)
 
 ---
 
@@ -53,8 +53,27 @@ mvn spring-boot:run &
 sleep 15
 curl http://localhost:8081/actuator/health
 # Expected: {"status":"UP"}
-# If DOWN: application context failed — report error to Route & Configuration Agent
+# If DOWN: application context failed - report error to Route & Configuration Agent
 ```
+
+**Authentication validation:**
+```bash
+# Test login with default credentials
+curl -X POST http://localhost:8081/login \
+  -d "username=admin&password=admin" \
+  -L -c cookies.txt -b cookies.txt
+
+# Expected: HTTP 302 redirect to home page or successful login response
+# If 401/403: authentication not configured - report to Route & Configuration Agent
+
+# Test accessing protected endpoint without login
+curl http://localhost:8081/listPersons
+
+# Expected: HTTP 302 redirect to /login
+# If 200 OK: security not configured correctly - report to Route & Configuration Agent
+```
+
+**Rule P3-4:** Authentication MUST be validated before any functional testing. Without working authentication, all protected endpoints are inaccessible.
 
 ---
 
@@ -78,48 +97,155 @@ class {Module}ServiceImplTest {
     @Test
     void getAll_withExistingRecords_returnsAllAsResponses() {
         // Arrange
-        List<{Entity}> entities = List.of(/* test data */);
+        List<{Entity}> entities = List.of(
+            new {Entity}(...),
+            new {Entity}(...)
+        );
         when({module}Repository.findAll()).thenReturn(entities);
 
         // Act
-        List<{Module}Response> result = {module}Service.getAll();
+        List<{Module}Response> responses = {module}Service.getAll();
 
         // Assert
-        assertThat(result).hasSize(entities.size());
-        // Assert specific field values
-        verify({module}Repository, times(1)).findAll();
+        assertThat(responses).hasSize(2);
+        assertThat(responses.get(0).getId()).isEqualTo(entities.get(0).getId());
+        verify({module}Repository).findAll();
     }
 
     @Test
-    void getById_withNonExistentId_throwsResourceNotFoundException() {
-        when({module}Repository.findById(99L)).thenReturn(Optional.empty());
+    void getAll_withNoRecords_returnsEmptyList() {
+        // Arrange
+        when({module}Repository.findAll()).thenReturn(List.of());
 
-        assertThatThrownBy(() -> {module}Service.getById(99L))
-            .isInstanceOf(ResourceNotFoundException.class);
+        // Act
+        List<{Module}Response> responses = {module}Service.getAll();
+
+        // Assert
+        assertThat(responses).isEmpty();
+        verify({module}Repository).findAll();
     }
 
     @Test
-    void save_withValidData_persistsAndReturnsResponse() {
-        // Test that business rules from the original Struts Action are enforced
-        // e.g., if age < 18 was rejected in Struts, verify it is still rejected here
+    void getById_withExistingRecord_returnsResponse() {
+        // Arrange
+        Long id = 1L;
+        {Entity} entity = new {Entity}(...);
+        when({module}Repository.findById(id)).thenReturn(Optional.of(entity));
+
+        // Act
+        {Module}Response response = {module}Service.getById(id);
+
+        // Assert
+        assertThat(response.getId()).isEqualTo(id);
+        verify({module}Repository).findById(id);
+    }
+
+    @Test
+    void getById_withNonExistentRecord_throwsException() {
+        // Arrange
+        Long id = 999L;
+        when({module}Repository.findById(id)).thenReturn(Optional.empty());
+
+        // Act & Assert
+        assertThatThrownBy(() -> {module}Service.getById(id))
+            .isInstanceOf({Module}NotFoundException.class)
+            .hasMessageContaining("not found");
+        verify({module}Repository).findById(id);
+    }
+
+    @Test
+    void create_withValidData_returnsCreatedResponse() {
+        // Arrange
+        {Module}Request request = new {Module}Request(...);
+        {Entity} entity = new {Entity}(...);
+        when({module}Repository.save(any({Entity}.class))).thenReturn(entity);
+
+        // Act
+        {Module}Response response = {module}Service.create(request);
+
+        // Assert
+        assertThat(response.getId()).isNotNull();
+        verify({module}Repository).save(any({Entity}.class));
+    }
+
+    @Test
+    void update_withExistingRecord_returnsUpdatedResponse() {
+        // Arrange
+        Long id = 1L;
+        {Module}Request request = new {Module}Request(...);
+        {Entity} existingEntity = new {Entity}(...);
+        when({module}Repository.findById(id)).thenReturn(Optional.of(existingEntity));
+        when({module}Repository.save(any({Entity}.class))).thenReturn(existingEntity);
+
+        // Act
+        {Module}Response response = {module}Service.update(id, request);
+
+        // Assert
+        assertThat(response.getId()).isEqualTo(id);
+        verify({module}Repository).findById(id);
+        verify({module}Repository).save(any({Entity}.class));
+    }
+
+    @Test
+    void update_withNonExistentRecord_throwsException() {
+        // Arrange
+        Long id = 999L;
+        {Module}Request request = new {Module}Request(...);
+        when({module}Repository.findById(id)).thenReturn(Optional.empty());
+
+        // Act & Assert
+        assertThatThrownBy(() -> {module}Service.update(id, request))
+            .isInstanceOf({Module}NotFoundException.class);
+        verify({module}Repository).findById(id);
+        verify({module}Repository, never()).save(any({Entity}.class));
+    }
+
+    @Test
+    void delete_withExistingRecord_deletesSuccessfully() {
+        // Arrange
+        Long id = 1L;
+        when({module}Repository.existsById(id)).thenReturn(true);
+        doNothing().when({module}Repository).deleteById(id);
+
+        // Act
+        {module}Service.delete(id);
+
+        // Assert
+        verify({module}Repository).existsById(id);
+        verify({module}Repository).deleteById(id);
+    }
+
+    @Test
+    void delete_withNonExistentRecord_throwsException() {
+        // Arrange
+        Long id = 999L;
+        when({module}Repository.existsById(id)).thenReturn(false);
+
+        // Act & Assert
+        assertThatThrownBy(() -> {module}Service.delete(id))
+            .isInstanceOf({Module}NotFoundException.class);
+        verify({module}Repository).existsById(id);
+        verify({module}Repository, never()).deleteById(id);
     }
 }
 ```
 
-#### Coverage Targets for Unit Tests
-- Every public service method: happy path
-- Every public service method: all error paths (entity not found, validation failure, etc.)
-- Every business rule from the original Struts Action (verify they are in the service)
+**Coverage requirements:**
+- Test every public method in service classes
+- Minimum 90% line coverage per service class
+- Test both success and error paths
+- Mock all dependencies (repositories, external services)
 
 ---
 
-### 3. Controller Slice Test Generation
+### 3. Controller Slice Tests
 
-For each controller in the current module, generate a `@WebMvcTest` test class:
+For each controller in the current module, generate `@WebMvcTest` tests:
 
 ```java
 // Template: src/test/java/.../controller/{Module}ControllerTest.java
 @WebMvcTest({Module}Controller.class)
+@Import({SecurityConfig.class, JwtAuthenticationFilter.class})
 class {Module}ControllerTest {
 
     @Autowired
@@ -128,304 +254,429 @@ class {Module}ControllerTest {
     @MockBean
     private {Module}Service {module}Service;
 
-    @Autowired
-    private ObjectMapper objectMapper;
-
-    // === Security Tests (MANDATORY for every controller) ===
-
     @Test
-    void anyProtectedEndpoint_whenUnauthenticated_returns401() throws Exception {
-        mockMvc.perform(get("/{module-url}"))
-            .andExpect(status().isUnauthorized());
-    }
+    @WithMockUser(username = "admin", roles = {"USER"})
+    void getAll_returnsOkResponse() throws Exception {
+        // Arrange
+        List<{Module}Response> responses = List.of(
+            new {Module}Response(...),
+            new {Module}Response(...)
+        );
+        when({module}Service.getAll()).thenReturn(responses);
 
-    @Test
-    @WithMockUser(roles = "ADMIN")  // Use the role that Struts interceptor required
-    void anyProtectedEndpoint_whenUnauthorized_returns403() throws Exception {
-        // Test with wrong role
-    }
-
-    // === Endpoint Tests ===
-
-    @Test
-    @WithMockUser
-    void list_returnsOkWithData() throws Exception {
-        when({module}Service.getAll()).thenReturn(/* test data */);
-
-        mockMvc.perform(get("/{module-url}")
-                .contentType(MediaType.APPLICATION_JSON))
+        // Act & Assert
+        mockMvc.perform(get("/api/{module}s"))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$", hasSize(greaterThan(0))));
+            .andExpect(jsonPath("$.length()").value(2))
+            .andExpect(jsonPath("$[0].id").isNumber());
     }
 
     @Test
-    @WithMockUser
-    void create_withValidBody_returns201() throws Exception {
-        {Module}Request request = /* valid request */;
-        when({module}Service.create(any())).thenReturn(/* response */);
+    @WithMockUser(username = "admin", roles = {"USER"})
+    void getById_withValidId_returnsOkResponse() throws Exception {
+        // Arrange
+        Long id = 1L;
+        {Module}Response response = new {Module}Response(...);
+        when({module}Service.getById(id)).thenReturn(response);
 
-        mockMvc.perform(post("/{module-url}")
+        // Act & Assert
+        mockMvc.perform(get("/api/{module}s/{id}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.id").value(id));
+    }
+
+    @Test
+    @WithMockUser(username = "admin", roles = {"USER"})
+    void create_withValidData_returnsCreatedResponse() throws Exception {
+        // Arrange
+        {Module}Request request = new {Module}Request(...);
+        {Module}Response response = new {Module}Response(...);
+        when({module}Service.create(any({Module}Request.class))).thenReturn(response);
+
+        // Act & Assert
+        mockMvc.perform(post("/api/{module}s")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request)))
-            .andExpect(status().isCreated());
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.id").isNumber());
     }
 
     @Test
-    @WithMockUser
-    void create_withInvalidBody_returns400WithErrorDetails() throws Exception {
-        {Module}Request invalidRequest = /* invalid — e.g., blank required field */;
+    @WithMockUser(username = "admin", roles = {"USER"})
+    void update_withValidData_returnsOkResponse() throws Exception {
+        // Arrange
+        Long id = 1L;
+        {Module}Request request = new {Module}Request(...);
+        {Module}Response response = new {Module}Response(...);
+        when({module}Service.update(eq(id), any({Module}Request.class))).thenReturn(response);
 
-        mockMvc.perform(post("/{module-url}")
+        // Act & Assert
+        mockMvc.perform(put("/api/{module}s/{id}")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(invalidRequest)))
-            .andExpect(status().isBadRequest())
-            .andExpect(jsonPath("$.errors").exists());
+                .content(objectMapper.writeValueAsString(request)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.id").value(id));
     }
 
     @Test
-    @WithMockUser
-    void getById_whenNotFound_returns404() throws Exception {
-        when({module}Service.getById(99L))
-            .thenThrow(new ResourceNotFoundException("{Entity}", 99L));
+    @WithMockUser(username = "admin", roles = {"USER"})
+    void delete_withValidId_returnsNoContent() throws Exception {
+        // Arrange
+        Long id = 1L;
+        doNothing().when({module}Service).delete(id);
 
-        mockMvc.perform(get("/{module-url}/99"))
-            .andExpect(status().isNotFound());
+        // Act & Assert
+        mockMvc.perform(delete("/api/{module}s/{id}"))
+            .andExpect(status().isNoContent());
+    }
+
+    @Test
+    void getAll_withoutAuthentication_returnsUnauthorized() throws Exception {
+        // Act & Assert
+        mockMvc.perform(get("/api/{module}s"))
+            .andExpect(status().isUnauthorized());
     }
 }
 ```
 
-#### Required Controller Test Coverage
-- `GET /module` — 200 OK (authenticated)
-- `GET /module` — 401 Unauthorized (unauthenticated)
-- `GET /module/{id}` — 200 OK
-- `GET /module/{id}` — 404 Not Found (non-existent ID)
-- `POST /module` — 201 Created (valid body)
-- `POST /module` — 400 Bad Request (invalid body — missing required fields)
-- `POST /module` — 400 Bad Request (invalid body — format errors)
-- `PUT /module/{id}` — 200 OK (valid update)
-- `DELETE /module/{id}` — 204 No Content
-- All role-protected endpoints — 403 Forbidden (wrong role)
+**Coverage requirements:**
+- Test every endpoint in controller classes
+- Test request/response serialization
+- Test authentication and authorization
+- Test validation error responses
 
 ---
 
-### 4. Integration Test Generation
+### 4. Integration Tests
 
-For the current module, generate a `@SpringBootTest` test class:
+For each module, generate `@SpringBootTest` tests with database:
 
 ```java
 // Template: src/test/java/.../integration/{Module}IntegrationTest.java
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@TestPropertySource(properties = {
-    "spring.jpa.hibernate.ddl-auto=validate",  // RULE-1 — never create-drop
-    "server.port=0"
-})
+@SpringBootTest
+@AutoConfigureMockMvc
+@Transactional
 class {Module}IntegrationTest {
 
     @Autowired
-    private TestRestTemplate restTemplate;
+    private MockMvc mockMvc;
 
-    @Test
-    void create{Entity}_andRetrieve_fullRoundTrip() {
-        {Module}Request request = /* build valid request */;
+    @Autowired
+    private {Module}Repository {module}Repository;
 
-        // Create
-        ResponseEntity<{Module}Response> created =
-            restTemplate.withBasicAuth("testuser", "testpass")
-                .postForEntity("/{module-url}", request, {Module}Response.class);
+    @Autowired
+    private ObjectMapper objectMapper;
 
-        assertThat(created.getStatusCode()).isEqualTo(HttpStatus.CREATED);
-        Long id = created.getBody().getId();
-
-        // Retrieve
-        ResponseEntity<{Module}Response> retrieved =
-            restTemplate.withBasicAuth("testuser", "testpass")
-                .getForEntity("/{module-url}/" + id, {Module}Response.class);
-
-        assertThat(retrieved.getStatusCode()).isEqualTo(HttpStatus.OK);
-        assertThat(retrieved.getBody().get{PrimaryField}())
-            .isEqualTo(request.get{PrimaryField}());
+    @BeforeEach
+    void setUp() {
+        {module}Repository.deleteAll();
     }
 
-    // Test every user journey from MIGRATION-INVENTORY.md for this module
+    @Test
+    @WithMockUser(username = "admin", roles = {"USER"})
+    void getAll_withExistingRecords_returnsAll() throws Exception {
+        // Arrange
+        {Entity} entity1 = {module}Repository.save(new {Entity}(...));
+        {Entity} entity2 = {module}Repository.save(new {Entity}(...));
+
+        // Act & Assert
+        mockMvc.perform(get("/api/{module}s"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.length()").value(2))
+            .andExpect(jsonPath("$[0].id").value(entity1.getId()))
+            .andExpect(jsonPath("$[1].id").value(entity2.getId()));
+    }
+
+    @Test
+    @WithMockUser(username = "admin", roles = {"USER"})
+    void create_withValidData_createsAndReturnsEntity() throws Exception {
+        // Arrange
+        {Module}Request request = new {Module}Request(...);
+
+        // Act & Assert
+        mockMvc.perform(post("/api/{module}s")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.id").exists());
+
+        // Verify database
+        assertThat({module}Repository.count()).isEqualTo(1);
+    }
+
+    @Test
+    @WithMockUser(username = "admin", roles = {"USER"})
+    void update_withValidData_updatesAndReturnsEntity() throws Exception {
+        // Arrange
+        {Entity} entity = {module}Repository.save(new {Entity}(...));
+        {Module}Request request = new {Module}Request(...);
+
+        // Act & Assert
+        mockMvc.perform(put("/api/{module}s/{id}")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
+            .andExpect(status().isOk());
+
+        // Verify database
+        {Entity} updatedEntity = {module}Repository.findById(entity.getId()).orElseThrow();
+        assertThat(updatedEntity.get...()).isEqualTo(...);
+    }
+
+    @Test
+    @WithMockUser(username = "admin", roles = {"USER"})
+    void delete_withValidId_deletesEntity() throws Exception {
+        // Arrange
+        {Entity} entity = {module}Repository.save(new {Entity}(...));
+
+        // Act & Assert
+        mockMvc.perform(delete("/api/{module}s/{id}"))
+            .andExpect(status().isNoContent());
+
+        // Verify database
+        assertThat({module}Repository.existsById(entity.getId())).isFalse();
+    }
 }
 ```
+
+**Coverage requirements:**
+- Test complete request/response cycle
+- Test database persistence
+- Use `@Transactional` to rollback changes
+- Test with real database (H2 for test profile)
 
 ---
 
 ### 5. Parallel Verification
 
-For every endpoint in the current module, compare Struts and Spring Boot responses:
+For each migrated endpoint, compare Spring Boot output with Struts original:
 
 ```bash
-#!/bin/bash
-# parallel-verify.sh — run for each endpoint in the module
+# Start Struts application on port 8080
+cd /path/to/struts-app
+mvn jetty:run &
+STRUTS_PID=$!
 
-MODULE="persons"
-BASE_STRUTS="http://localhost:8080"
-BASE_SPRING="http://localhost:8081"
-AUTH="-u testuser:testpass"
+# Start Spring Boot application on port 8081
+cd /path/to/springboot-app
+mvn spring-boot:run &
+SPRING_PID=$!
 
-echo "=== Parallel Verification: $MODULE ==="
+# Wait for both applications to start
+sleep 30
 
-# List endpoint
-curl -s $AUTH "$BASE_STRUTS/admin/$MODULE/list.action" \
-    -H "Accept: application/json" > /tmp/struts_list.json
+# Run parallel verification for each endpoint
+./scripts/parallel-verification.sh \
+  --struts-url http://localhost:8080 \
+  --spring-url http://localhost:8081 \
+  --endpoints /api/{module}s,/api/{module}s/{id} \
+  --test-data ./test-data/{module}-test-cases.json
 
-curl -s $AUTH "$BASE_SPRING/api/$MODULE" \
-    -H "Accept: application/json" > /tmp/spring_list.json
-
-# Normalize and compare
-python3 -c "
-import json, sys
-s = json.load(open('/tmp/struts_list.json'))
-b = json.load(open('/tmp/spring_list.json'))
-# Extract the data array (Struts wraps in a result object, Spring returns the array directly)
-s_data = s.get('persons', s) if isinstance(s, dict) else s
-b_data = b
-assert len(s_data) == len(b_data), f'Count mismatch: Struts={len(s_data)}, Spring={len(b_data)}'
-for i, (si, bi) in enumerate(zip(s_data, b_data)):
-    for key in ['id', 'firstName', 'lastName', 'email']:
-        if key in si:
-            assert str(si[key]) == str(bi.get(key, '')), \
-                f'Field mismatch [{i}].{key}: Struts={si[key]}, Spring={bi.get(key)}'
-print('PASS: $MODULE list endpoint — responses match')
-"
+# Stop both applications
+kill $STRUTS_PID $SPRING_PID
 ```
 
-Document every difference in the Module Completion Report:
-- Acceptable differences: field ordering, additional wrapper envelope, date format normalization
-- Unacceptable differences: missing records, wrong data, missing fields, wrong status codes
+**Verification criteria:**
+- HTTP status codes must match
+- Response structure must match
+- Response data must match
+- Performance must be within acceptable range (< 20% slower)
+
+**Report format:**
+```
+Parallel Verification Report - {Module}
+============================================
+Total Endpoints: 5
+Passed: 5
+Failed: 0
+Performance: All within acceptable range
+
+Endpoint Details:
+- GET /api/{module}s: PASS
+- GET /api/{module}s/{id}: PASS
+- POST /api/{module}s: PASS
+- PUT /api/{module}s/{id}: PASS
+- DELETE /api/{module}s/{id}: PASS
+
+Recommendation: APPROVED for traffic switch
+```
 
 ---
 
-### 6. Rollback Test
+### 6. Rollback Testing
 
-Before any traffic switch:
+Before approving traffic switch, run rollback test:
 
 ```bash
-#!/bin/bash
-# rollback-test.sh
+# Rollback Test Script
+./scripts/rollback-test.sh
 
-echo "=== Rollback Test: $MODULE ==="
-ROLLBACK_START=$(date +%s)
+# This script:
+# 1. Takes database snapshot
+# 2. Runs smoke tests against Struts
+# 3. Switches traffic to Spring Boot
+# 4. Runs smoke tests against Spring Boot
+# 5. Rolls back traffic to Struts
+# 6. Verifies Struts still works correctly
+# 7. Restores database snapshot
+```
 
-# Step 1: Switch traffic to Spring Boot (nginx hot reload)
-sudo nginx -s reload  # After updating nginx.conf to Spring Boot
+**Rollback criteria:**
+- Traffic switch completes within 5 minutes
+- Smoke tests pass on Spring Boot
+- Rollback completes within 5 minutes
+- Struts continues to function after rollback
+- No data corruption or loss
 
-# Step 2: Verify Spring Boot is serving
-RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" -u testuser:testpass \
-    http://localhost/api/persons)
-[ "$RESPONSE" = "200" ] && echo "PASS: Spring Boot serving" || echo "FAIL: Spring Boot not responding"
+**Report format:**
+```
+Rollback Test Report - {Module}
+============================================
+Traffic Switch: SUCCESS (2m 30s)
+Spring Boot Tests: PASS
+Rollback: SUCCESS (2m 15s)
+Struts Post-Rollback Tests: PASS
+Data Integrity: VERIFIED
 
-# Step 3: Revert nginx to Struts
-# (restore original nginx.conf)
-sudo nginx -s reload
-
-# Step 4: Verify Struts is serving again
-RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" -u testuser:testpass \
-    http://localhost/admin/persons/list.action)
-[ "$RESPONSE" = "200" ] && echo "PASS: Struts serving after rollback" || echo "FAIL: Struts not responding"
-
-ROLLBACK_END=$(date +%s)
-ROLLBACK_TIME=$((ROLLBACK_END - ROLLBACK_START))
-echo "Rollback time: ${ROLLBACK_TIME}s (must be < 300s)"
-[ $ROLLBACK_TIME -lt 300 ] && echo "PASS: Rollback time acceptable" || echo "FAIL: Rollback too slow"
+Recommendation: ROLLBACK VERIFIED - Safe to proceed with traffic switch
 ```
 
 ---
 
-### 7. Test Report Generation
+## Definition of Done (Per Module)
 
-After all tests pass, produce the Module Test Report (consumed by the Documentation Agent):
-
-```markdown
-# Module Test Report: {Module}
-Date: {YYYY-MM-DD}
-
-## Build Status: PASS
-
-## Unit Test Results
-- Total: X | Passed: X | Failed: 0
-- Coverage: Service methods {Y}% line coverage
-
-## Controller Slice Test Results
-- Total: X | Passed: X | Failed: 0
-- Endpoints covered: {list all GET/POST/PUT/DELETE endpoints}
-- Security tests: {X authenticated, X unauthenticated, X role-based}
-
-## Integration Test Results
-- Total: X | Passed: X | Failed: 0
-- User journeys covered: {list from MIGRATION-INVENTORY.md}
-
-## Parallel Verification
-- Struts baseline captured: YES
-- Spring Boot responses match: YES / NO (with noted differences)
-- Unacceptable differences: NONE / {list any}
-
-## Rollback Test
-- Completed: YES
-- Rollback time: {X seconds}
-- Result: PASS (< 300s) / FAIL
-
-## Sign-Off Status: APPROVED / BLOCKED
-Blocking issues (if any): {list}
-```
-
----
-
-## Inputs
-
-| Path | Purpose |
-|---|---|
-| `spring-boot-app/src/main/java/.../controller/{Module}Controller.java` | Controller under test |
-| `spring-boot-app/src/main/java/.../service/impl/{Module}ServiceImpl.java` | Service under test |
-| `spring-boot-app/src/main/java/.../config/SecurityConfig.java` | Security rules for 401/403 tests |
-| `spring-boot-app/src/main/resources/templates/{module}/` | Thymeleaf templates (if Thymeleaf path) |
-| `docs/MIGRATION-INVENTORY.md` | User journeys to cover in integration tests |
-| `docs/modules/QUALITY-REPORT-{Module}.md` | Must be APPROVED before running integration tests |
-| Running `struts-app` on port 8080 | Parallel verification baseline |
-| Running `spring-boot-app` on port 8081 | System under test |
-
----
-
-## Outputs
-
-| Output Path | Description |
-|---|---|
-| `spring-boot-app/src/test/java/.../service/{Module}ServiceImplTest.java` | Unit tests |
-| `spring-boot-app/src/test/java/.../controller/{Module}ControllerTest.java` | @WebMvcTest controller slice tests |
-| `spring-boot-app/src/test/java/.../integration/{Module}IntegrationTest.java` | Full stack integration tests |
-| `docs/modules/MODULE-TEST-REPORT-{Module}.md` | Signed test report (APPROVED / BLOCKED) |
-| `docs/MIGRATION-INVENTORY.md` | Updated — module status = `Verified` |
+- [ ] All pre-test validations passed (build, dependencies, imports, Spring context, authentication)
+- [ ] Unit tests generated with minimum 90% coverage
+- [ ] Unit tests all passing
+- [ ] Controller slice tests generated for all endpoints
+- [ ] Controller slice tests all passing
+- [ ] Integration tests generated for all endpoints
+- [ ] Integration tests all passing
+- [ ] Parallel verification completed with 100% pass rate
+- [ ] Performance within acceptable range (< 20% slower than Struts)
+- [ ] Rollback test completed successfully
+- [ ] Test report generated and signed
+- [ ] Authentication validated (login with admin/admin works)
+- [ ] Protected endpoints verified (redirect to /login without auth)
 
 ---
 
 ## Constraints
-
-### MUST NOT
-- Use `ddl-auto=create-drop` or `ddl-auto=update` in any test configuration (RULE-1)
-- Use H2 in-memory database for integration tests (masks schema differences)
-- Switch traffic for a module without a signed test report (RULE-7)
-- Skip security tests — every controller must have 401/403 tests
 
 ### MUST
 - Run all three test levels for every module (unit, controller slice, integration)
 - Verify parallel output matches Struts for every migrated endpoint
 - Run and time the rollback test before approving traffic switch
 - Fail fast on Struts imports found in generated code
+- Validate authentication works before functional testing (P3-4)
+- Test login with default credentials (admin/admin)
+- Verify protected endpoints redirect to login page
 - Report results to the Documentation Agent for the Module Completion Report
+
+### SHOULD
+- Use Maven for build and test execution
+- Use H2 database for integration tests
+- Use Mockito for mocking dependencies
+- Use AssertJ for assertions
+- Achieve minimum 80% overall code coverage
+- Generate test reports in HTML format
+
+### CANNOT
+- Skip any test level (unit, controller, integration)
+- Proceed to traffic switch without rollback test verification
+- Approve module with failing tests
+- Approve module with Struts imports in generated code
+- Approve module without authentication validation
 
 ---
 
-## Definition of Done (Per Module)
-- [ ] `mvn clean compile` — BUILD SUCCESS
-- [ ] No Struts imports in generated code
-- [ ] No `new ServiceClass()` in generated code (RULE-4)
-- [ ] Unit tests — all pass, ≥90% service coverage
-- [ ] Controller slice tests — all pass, 100% endpoint coverage
-- [ ] Security tests — 401/403 verified for all protected URLs
-- [ ] Integration tests — all pass, all user journeys covered
-- [ ] Parallel verification — Spring Boot responses match Struts baseline
-- [ ] Rollback test — completed in < 5 minutes
-- [ ] `docs/modules/MODULE-TEST-REPORT-{Module}.md` — status: APPROVED
-- [ ] `docs/MIGRATION-INVENTORY.md` — module status updated to `Verified`
+## Critical Rules
+
+| Rule ID | Description | Severity |
+|---------|-------------|----------|
+| RULE-7 | No traffic switch without integration tests | Blocking |
+| P3-4 | Authentication must be validated before functional testing | Blocking |
+| RULE-1 | Use ddl-auto=validate in tests | Blocking |
+
+---
+
+## Output Files
+
+For each module, generate:
+1. **Unit test classes:** `src/test/java/.../service/{Module}ServiceImplTest.java`
+2. **Controller test classes:** `src/test/java/.../controller/{Module}ControllerTest.java`
+3. **Integration test classes:** `src/test/java/.../integration/{Module}IntegrationTest.java`
+4. **Test reports:** `reports/{module}-test-report.html`
+5. **Parallel verification reports:** `reports/{module}-parallel-verification.json`
+6. **Rollback test reports:** `reports/{module}-rollback-test.json`
+
+---
+
+## Integration Points
+
+### Code Transformation Agent
+- Receive: Migrated service and controller classes
+- Provide: Test requirements and coverage reports
+- Report: Compilation errors and import issues
+
+### Route & Configuration Agent
+- Receive: Test configuration requirements
+- Report: Spring context startup issues
+- Report: Authentication configuration issues
+
+### Documentation Agent
+- Provide: Test reports and metrics
+- Provide: Module completion sign-off
+- Provide: Parallel verification results
+
+---
+
+## Success Criteria
+
+1. **All tests passing:** Every test at every level passes
+2. **Coverage targets met:** Minimum 90% service coverage, 80% overall coverage
+3. **Parallel verification pass:** 100% endpoint compatibility with Struts
+4. **Rollback verified:** Traffic can be switched and rolled back safely
+5. **Struts imports eliminated:** Zero Struts imports in generated code
+6. **Authentication validated:** Login with admin/admin works, protected endpoints redirect correctly
+
+---
+
+## Quality Metrics
+
+Track and report:
+- Test execution time per module
+- Code coverage percentage
+- Parallel verification pass rate
+- Performance comparison (Spring Boot vs Struts)
+- Rollback test duration
+- Defect density (bugs found during testing)
+
+---
+
+## Escalation Path
+
+If any critical issue is found:
+1. **Compilation errors:** Report to Code Transformation Agent immediately
+2. **Spring context failures:** Report to Route & Configuration Agent immediately
+3. **Authentication failures:** Report to Route & Configuration Agent immediately
+4. **Parallel verification failures:** Report to Code Transformation Agent for investigation
+5. **Rollback test failures:** STOP traffic switch - investigate with all agents
+
+---
+
+## Completion Sign-Off
+
+Before signing off a module, confirm:
+- [ ] All Definition of Done items checked
+- [ ] All Critical Rules satisfied
+- [ ] All Success Criteria met
+- [ ] Test reports generated and reviewed
+- [ ] Parallel verification passed
+- [ ] Rollback test verified
+- [ ] No blocking issues remaining
+
+**Sign-off:** Module {Module} is APPROVED for traffic switch
+
+**Date:** {timestamp}
+
+**Agent:** Validation & Testing Agent

@@ -9,7 +9,7 @@ tools: read_file, create_file, edit_file, list_directory
 Infrastructure Configurator. You migrate all cross-cutting concerns and routing infrastructure from Struts to Spring Boot. You lay the foundation that every controller migrated in Phase 4 will inherit automatically.
 
 ## References
-- [migration-playbook.md](../instructions/migration-playbook.md) — Phase 3 (Cross-Cutting Concerns), Phase 4 §5.3 (Route Mapping)
+- [migration-playbook.md](../instructions/migration-playbook.md) — Phase 3 (Cross-Cutting Concerns), Phase 4 §4.3 (Route Mapping)
 - [migration-rules.md](../instructions/migration-rules.md) — RULE-1 (ddl-auto), RULE-2 (security first), P3-2 (match security rules exactly)
 - [springboot-standards.md](../instructions/springboot-standards.md) — SecurityConfig, application.properties, exception handling
 - [coding-guidelines.md](../instructions/coding-guidelines.md) — Class structure, naming conventions
@@ -49,10 +49,11 @@ logging.level.org.springframework.web=INFO
 logging.level.org.hibernate.SQL=WARN
 ```
 
-Extract database connection values from the Struts `applicationContext.xml`, `hibernate.cfg.xml`, or `web.xml` datasource configuration.
+**Rule P2-2:** `ddl-auto` MUST be `validate` or `none`. Never `create-drop` or `update`.
+**Rule P2-1:** Spring Boot is a separate Maven artifact. Never merge into Struts pom.xml.
 
 ### 2. Spring Security Configuration
-Replace every Struts authentication/authorization interceptor with a `SecurityFilterChain`:
+Create `src/main/java/.../config/SecurityConfig.java` that replicates Struts security rules:
 
 ```java
 @Configuration
@@ -60,274 +61,303 @@ Replace every Struts authentication/authorization interceptor with a `SecurityFi
 public class SecurityConfig {
 
     @Bean
-    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
             .authorizeHttpRequests(auth -> auth
-                // Map EVERY URL pattern from the Struts security interceptor inventory
-                .requestMatchers("/public/**", "/actuator/health").permitAll()
+                .requestMatchers("/login", "/error").permitAll()
                 .requestMatchers("/admin/**").hasRole("ADMIN")
                 .anyRequest().authenticated()
             )
             .formLogin(form -> form
                 .loginPage("/login")
+                .defaultSuccessUrl("/")
                 .permitAll()
             )
-            .logout(logout -> logout.permitAll())
-            .csrf(csrf -> csrf.disable()); // Enable for Thymeleaf; disable for REST
+            .logout(logout -> logout
+                .logoutSuccessUrl("/login")
+                .permitAll()
+            );
         return http.build();
     }
 }
 ```
 
-**Rule P3-2:** The URL patterns in `authorizeHttpRequests` must replicate the Struts security interceptor rules exactly. Use the Interceptor Inventory from the Audit Agent as input.
+**Rule P3-1:** Security MUST be configured before any Action class migration.
+**Rule P3-2:** Security rules MUST match Struts exactly. No relaxing or tightening of access control.
 
-### 3. Interceptor → Filter/HandlerInterceptor Migration
-For each custom interceptor in the inventory:
+### 2.1 User Authentication Provider Configuration
 
-| Struts Interceptor Purpose | Generate This |
-|---|---|
-| Authentication check | `SecurityFilterChain @Bean` in `SecurityConfig` |
-| Logging / auditing | Class implementing `HandlerInterceptor`, registered in `WebMvcConfig` |
-| CORS header injection | `CorsConfigurationSource @Bean` in `SecurityConfig` or `@CrossOrigin` |
-| Transaction wrapping | Remove — `@Transactional` on service methods (Code Transformation Agent's job) |
-| File upload handling | `spring.servlet.multipart.*` in `application.properties` |
-| Custom token check | Class extending `OncePerRequestFilter`, registered as `@Bean` |
+**CRITICAL:** Security configuration MUST include user authentication provider. Without this, users cannot log in. This is a common migration gap that MUST be addressed.
 
-HandlerInterceptor registration:
+Create `UserDetailsService` bean in `SecurityConfig.java`:
+
+**Option 1: In-Memory User (for development/testing):**
+
+```java
+@Bean
+@Override
+public UserDetailsService userDetailsService() {
+    UserDetails user = User.withDefaultPasswordEncoder()
+        .username("admin")
+        .password("admin")
+        .roles("USER")
+        .build();
+    
+    return new InMemoryUserDetailsManager(user);
+}
+```
+
+**Option 2: Database-Based User (for production):**
+
+If the Struts application has a user table, create a User entity and repository:
+
+```java
+@Entity
+@Table(name = "users")
+public class User {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+    
+    @Column(unique = true, nullable = false)
+    private String username;
+    
+    @Column(nullable = false)
+    private String password;
+    
+    @ElementCollection(fetch = FetchType.EAGER)
+    private Set<String> roles;
+    
+    // Getters and setters
+}
+
+public interface UserRepository extends JpaRepository<User, Long> {
+    Optional<User> findByUsername(String username);
+}
+```
+
+Then configure the UserDetailsService:
+
+```java
+@Autowired
+private UserRepository userRepository;
+
+@Bean
+public UserDetailsService userDetailsService() {
+    return username -> userRepository.findByUsername(username)
+        .map(user -> User.withUsername(user.getUsername())
+            .password(user.getPassword())
+            .roles(user.getRoles().toArray(new String[0]))
+            .build())
+        .orElseThrow(() -> new UsernameNotFoundException("User not found: " + username));
+}
+
+@Bean
+public PasswordEncoder passwordEncoder() {
+    return new BCryptPasswordEncoder();
+}
+```
+
+**Rule P3-3:** User authentication provider MUST be configured as part of security setup. Security without users is incomplete and will prevent all authenticated access.
+
+**Implementation Guidelines:**
+- For **development/testing migrations**: Use Option 1 (In-Memory User) with admin/admin credentials
+- For **production migrations**: Use Option 2 (Database-Based User) with BCrypt password encoding
+- Always verify login functionality works before proceeding to Phase 4
+- Document the default credentials in the migration report
+**Rule P3-2:** Security rules MUST match Struts exactly. No relaxing or tightening of access control.
+
+### 3. Interceptor Migration
+For each Struts interceptor, create Spring equivalents:
+
+**Struts Interceptor → Spring Component**
+
+| Struts Interceptor | Spring Equivalent |
+|-------------------|-------------------|
+| `params` | Built-in (no migration needed) |
+| `validation` | Spring Validation (`@Valid`) |
+| `token` | `@CsrfToken` (Spring Security) |
+| `logger` | `@Slf4j` + `@Aspect` |
+| `authentication` | Spring Security filters |
+| `custom interceptor` | `@Component` + `HandlerInterceptorAdapter` |
+
+Create interceptors as Spring beans and register in `WebMvcConfigurer`:
+
 ```java
 @Configuration
-public class WebMvcConfig implements WebMvcConfigurer {
+public class WebConfig implements WebMvcConfigurer {
 
-    private final RequestLoggingInterceptor requestLoggingInterceptor;
-
-    public WebMvcConfig(RequestLoggingInterceptor requestLoggingInterceptor) {
-        this.requestLoggingInterceptor = requestLoggingInterceptor;
-    }
+    @Autowired
+    private CustomInterceptor customInterceptor;
 
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
-        registry.addInterceptor(requestLoggingInterceptor)
-            .addPathPatterns("/**")
-            .excludePathPatterns("/public/**", "/actuator/**");
+        registry.addInterceptor(customInterceptor)
+                .addPathPatterns("/admin/**")
+                .excludePathPatterns("/login");
     }
 }
 ```
 
-### 4. Global Exception Handler
-Replace every `<exception-mapping>` from `struts.xml` with `@ExceptionHandler` methods in `GlobalExceptionHandler.java`.
+### 4. Exception Handling
+Create `src/main/java/.../exception/GlobalExceptionHandler.java`:
 
-Map every exception type from the Audit Agent's exception inventory:
 ```java
 @ControllerAdvice
 public class GlobalExceptionHandler {
 
-    private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
-
-    // One @ExceptionHandler per <exception-mapping> found in struts.xml
-    @ExceptionHandler(ResourceNotFoundException.class)
-    public ResponseEntity<ErrorResponse> handleNotFound(ResourceNotFoundException ex) {
-        return ResponseEntity.status(HttpStatus.NOT_FOUND)
-            .body(new ErrorResponse(ex.getMessage()));
-    }
-
-    @ExceptionHandler(ValidationException.class)
-    public ResponseEntity<ErrorResponse> handleValidation(ValidationException ex) {
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-            .body(new ErrorResponse(ex.getMessage()));
-    }
+    private static final Logger logger = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<ErrorResponse> handleGeneral(Exception ex) {
-        log.error("Unhandled exception", ex);
-        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-            .body(new ErrorResponse("Internal server error"));
+    public ResponseEntity<ErrorResponse> handleException(Exception ex) {
+        logger.error("Unexpected error", ex);
+        ErrorResponse error = new ErrorResponse("INTERNAL_ERROR", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
+    }
+
+    @ExceptionHandler(NoSuchElementException.class)
+    public ResponseEntity<ErrorResponse> handleNotFound(NoSuchElementException ex) {
+        ErrorResponse error = new ErrorResponse("NOT_FOUND", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(error);
     }
 }
 ```
 
-### 5. URL Suffix Redirect Configuration
-Struts URLs end in `.action` or `.do`. Spring Boot URLs are clean. Configure 301 redirects:
+### 5. Struts Exception Mappings
+For each `<exception-mapping>` in `struts.xml`, add corresponding handler:
 
-Document the nginx config snippet (do not apply it — Ops applies it):
-```nginx
-# 301 redirect for legacy Struts URL patterns
-location ~ ^(.+)\.action$ {
-    return 301 $scheme://$host$1;
-}
-location ~ ^(.+)\.do$ {
-    return 301 $scheme://$host$1;
-}
-```
-
-Include this in `URL-MAPPING.md` under a section called "Legacy URL Redirects".
-
-### 6. CORS Configuration (if applicable)
-If the Audit identified CORS requirements:
 ```java
-@Bean
-public CorsConfigurationSource corsConfigurationSource() {
-    CorsConfiguration config = new CorsConfiguration();
-    config.setAllowedOrigins(List.of("https://your-frontend-domain.com"));
-    config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
-    config.setAllowedHeaders(List.of("*"));
-    config.setAllowCredentials(true);
-    UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-    source.registerCorsConfiguration("/**", config);
-    return source;
+@ExceptionHandler({BusinessException.class})
+public ResponseEntity<ErrorResponse> handleBusinessException(BusinessException ex) {
+    ErrorResponse error = new ErrorResponse(ex.getErrorCode(), ex.getMessage());
+    return ResponseEntity.status(ex.getHttpStatus()).body(error);
 }
 ```
 
-### 7. Multipart File Upload Configuration (if applicable)
-If the Audit identified file upload interceptors:
+### 6. Global Results
+For each `<global-result>` in `struts.xml`, add controller advice:
+
+```java
+@ControllerAdvice
+public class GlobalResultController {
+
+    @GetMapping("/error")
+    public String errorPage() {
+        return "error";
+    }
+
+    @GetMapping("/login")
+    public String loginPage() {
+        return "login";
+    }
+}
+```
+
+### 7. Static Resource Mapping
+If Struts serves static files from `/static`, configure:
+
+```java
+@Override
+public void addResourceHandlers(ResourceHandlerRegistry registry) {
+    registry.addResourceHandler("/static/**")
+            .addResourceLocations("classpath:/static/");
+}
+```
+
+### 8. View Resolution (Thymeleaf)
+If using Thymeleaf, ensure `application.properties` has:
+
 ```properties
-spring.servlet.multipart.enabled=true
-spring.servlet.multipart.max-file-size=10MB
-spring.servlet.multipart.max-request-size=10MB
+spring.thymeleaf.prefix=classpath:/templates/
+spring.thymeleaf.suffix=.html
+spring.thymeleaf.cache=false
 ```
 
-### 8. Profile-Specific Properties
-Generate `application-dev.properties` and `application-prod.properties`:
-```properties
-# application-dev.properties
-spring.jpa.show-sql=true
-logging.level.org.springframework.web=DEBUG
+### 9. Filter Migration
+For each Struts filter, create Spring filter:
 
-# application-prod.properties
-spring.jpa.show-sql=false
-logging.level.root=WARN
-```
-
----
-
-## Inputs
-
-Read from `struts-app/` (read-only) and `docs/`:
-
-| Path | Purpose |
-|---|---|
-| `docs/MIGRATION-INVENTORY.md` | Interceptor, filter, and exception mapping inventory |
-| `struts-app/src/main/resources/struts.xml` | Exception mappings, interceptor stacks |
-| `struts-app/src/main/resources/applicationContext.xml` | Datasource configuration |
-| `struts-app/src/main/webapp/WEB-INF/web.xml` | Servlet filters and listeners |
-| `struts-app/src/main/java/.../interceptor/` | Security interceptor classes (URL patterns) |
-
----
-
-## Outputs
-
-All files written to `spring-boot-app/` and `docs/`:
-
-| Output Path | Description |
-|---|---|
-| `spring-boot-app/src/main/resources/application.properties` | Core configuration |
-| `spring-boot-app/src/main/resources/application-dev.properties` | Dev profile |
-| `spring-boot-app/src/main/resources/application-prod.properties` | Prod profile |
-| `spring-boot-app/src/main/java/.../config/SecurityConfig.java` | Spring Security |
-| `spring-boot-app/src/main/java/.../config/WebMvcConfig.java` | Interceptor registration |
-| `spring-boot-app/src/main/java/.../filter/*.java` | One per Struts interceptor → `OncePerRequestFilter` |
-| `spring-boot-app/src/main/java/.../interceptor/*.java` | One per logging/audit Struts interceptor → `HandlerInterceptor` |
-| `spring-boot-app/src/main/java/.../exception/GlobalExceptionHandler.java` | Global exception handling |
-| `spring-boot-app/src/main/java/.../exception/*Exception.java` | One per exception type in the inventory |
-| `spring-boot-app/src/main/java/.../dto/ErrorResponse.java` | Error response DTO |
-| `docs/URL-MAPPING.md` | nginx redirect snippets and URL change documentation |
-
----
-
-## Constraints
-
-### MUST NOT
-- Modify any file inside `struts-app/`
-- Generate controller classes (that is the Code Transformation Agent's job)
-- Generate service or repository classes (that is the Code Transformation Agent's job)
-- Generate view templates (that is the View Migration Agent's job)
-- Change `spring.jpa.hibernate.ddl-auto` to anything other than `validate` (RULE-1)
-- Leave any security interceptor without a Spring equivalent (RULE-2)
-
-### MUST
-- Replicate every URL protection rule from Struts security interceptors exactly (P3-2)
-- Generate one `@ExceptionHandler` for every `<exception-mapping>` in the inventory
-- Set `server.port=8081` (Spring Boot must not conflict with Struts on 8080)
-- Produce working security tests (see Validation & Testing Agent) before exiting
-
----
-
-## Examples
-
-### Good: Security Rule Replication
-Struts interceptor protects `/admin/**` except `/admin/login`:
 ```java
-.authorizeHttpRequests(auth -> auth
-    .requestMatchers("/admin/login").permitAll()
-    .requestMatchers("/admin/**").hasRole("ADMIN")
-    .requestMatchers("/public/**", "/actuator/health").permitAll()
-    .anyRequest().authenticated()
-)
-```
-Every URL pattern from the interceptor is explicitly listed.
-
-### Bad: Security Rule Missing Pattern
-```java
-.authorizeHttpRequests(auth -> auth
-    .requestMatchers("/actuator/health").permitAll()
-    .anyRequest().authenticated()
-)
-```
-`/admin/**` role requirement is missing. This allows any authenticated user to access admin URLs — a security regression.
-
-### Good: Exception Mapping Preserved
-Struts had: `<exception-mapping exception="PaymentException" result="payment-error"/>`
-```java
-@ExceptionHandler(PaymentException.class)
-public ResponseEntity<ErrorResponse> handlePayment(PaymentException ex) {
-    return ResponseEntity.status(HttpStatus.PAYMENT_REQUIRED)
-        .body(new ErrorResponse(ex.getMessage()));
+@Component
+public class CustomFilter implements Filter {
+    @Override
+    public void doFilter(ServletRequest request, ServletResponse response, FilterChain chain)
+            throws IOException, ServletException {
+        // Filter logic
+        chain.doFilter(request, response);
+    }
 }
 ```
-
-### Bad: All Exceptions Mapped to Generic Handler
-```java
-@ExceptionHandler(Exception.class)
-public ResponseEntity<ErrorResponse> handleAll(Exception ex) {
-    return ResponseEntity.status(500).body(new ErrorResponse("Error"));
-}
-```
-`PaymentException` and other specific exceptions are not handled. Clients cannot distinguish error types.
-
----
-
-## Edge Cases
-
-### Struts Interceptor Applies to Some Namespaces Only
-If an interceptor applies to `/admin/**` but not `/public/**`:
-- Map this to `requestMatchers` with the exact path pattern
-- Do not apply globally with `anyRequest()`
-
-### Multiple Security Roles
-If the Struts interceptor checks different roles for different namespaces:
-```java
-.requestMatchers("/admin/**").hasRole("ADMIN")
-.requestMatchers("/reports/**").hasAnyRole("ADMIN", "MANAGER")
-.requestMatchers("/user/**").hasRole("USER")
-```
-
-### Custom Authentication Mechanism (Not Form Login)
-If Struts uses a custom `TokenInterceptor` for JWT or API key auth:
-- Implement `extends OncePerRequestFilter`
-- Extract and validate the token in `doFilterInternal()`
-- Set `SecurityContextHolder.getContext().setAuthentication(auth)`
 
 ---
 
 ## Definition of Done
-- [ ] `spring-boot-app/src/main/resources/application.properties` generated with `ddl-auto=validate`
-- [ ] `spring-boot-app/.../config/SecurityConfig.java` generated — URL rules match Struts interceptor rules
-- [ ] All custom interceptors from `struts-app/` have Spring equivalents in `spring-boot-app/`
-- [ ] `GlobalExceptionHandler` has one handler per `<exception-mapping>` found in `struts-app/struts.xml`
-- [ ] `docs/URL-MAPPING.md` generated with nginx redirect snippets
-- [ ] Profile-specific properties generated (`application-dev.properties`, `application-prod.properties`)
-- [ ] `WebMvcConfig` registers all `HandlerInterceptor` implementations
-- [ ] No file in `struts-app/` was modified
-- [ ] Validation & Testing Agent has verified:
-  - Protected URLs return 401/403 when unauthenticated
-  - Public URLs return 200 without credentials
-  - `spring-boot-app` health endpoint returns `{"status":"UP"}`
+
+This agent is complete when:
+
+- [ ] `application.properties` created with port 8081 and ddl-auto=validate
+- [ ] `SecurityConfig.java` created with rules matching Struts exactly
+- [ ] User authentication provider configured (UserDetailsService bean)
+- [ ] Test credentials verified (login with admin/admin works)
+- [ ] All Struts interceptors migrated to Spring equivalents
+- [ ] All Struts exception mappings migrated to `@ExceptionHandler`
+- [ ] All global results migrated to controller advice
+- [ ] Static resources configured (if applicable)
+- [ ] All Struts filters migrated to Spring filters
+- [ ] Spring Boot application starts successfully
+- [ ] `GET http://localhost:8081/actuator/health` returns `{"status":"UP"}`
+- [ ] Security rules verified by attempting to access protected endpoints
+- [ ] Migration tracker updated with status "In Progress" for this phase
+- [ ] No business logic or controllers written yet (Phase 4 only)
+
+---
+
+## Critical Rules
+
+| Rule | Description | Enforcement |
+|------|-------------|-------------|
+| RULE-1 | ddl-auto MUST be validate or none | Verify in application.properties |
+| RULE-2 | Security before business logic | Gate Phase 4 on Phase 3 completion |
+| P2-1 | Separate Maven artifact | Never modify Struts pom.xml |
+| P2-2 | ddl-auto=validate only | Fail on create-drop or update |
+| P3-1 | Security configured first | No controllers before SecurityConfig |
+| P3-2 | Match security exactly | Compare with Struts security rules |
+| P3-3 | User auth provider required | Security must include UserDetailsService |
+| RULE-4 | No `new` for Spring beans | Use `@Autowired` injection |
+
+---
+
+## Output Files
+
+Create these files in `spring-boot-app/`:
+
+```
+spring-boot-app/
+├── src/main/resources/
+│   └── application.properties
+├── src/main/java/.../config/
+│   ├── SecurityConfig.java
+│   └── WebConfig.java
+├── src/main/java/.../exception/
+│   ├── GlobalExceptionHandler.java
+│   └── ErrorResponse.java
+└── src/main/java/.../interceptor/
+    ├── CustomInterceptor.java
+    └── LoggingInterceptor.java
+```
+
+**NOTE:** SecurityConfig.java MUST include UserDetailsService bean for authentication to work. Without this, users cannot log in and all protected endpoints will be inaccessible.
+
+---
+
+## Handoff
+
+When complete, update `docs/MIGRATION-INVENTORY.md`:
+
+```markdown
+| Phase | Agent | Status | Notes |
+|-------|-------|--------|-------|
+| Phase 3 | Route & Configuration Agent | ✅ Complete | Security configured, interceptors migrated, health UP |
+| Phase 4 | Code Transformation Agent | ⏳ Pending | Ready to start PersonModule migration |
+```
+
+Then hand off to **Code Transformation Agent** for Phase 4 (Action class migration).
